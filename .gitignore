@@ -1,0 +1,64 @@
+# Next.js build output
+.next/
+out/
+
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+apps/api/.env
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Editor/OS specific files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Other common files
+coverage/
+dist/
+build/
+
+# Node.js dependencies
+node_modules/
+.env
+
+# Build artifacts
+dist/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# OS and Editor files
+.DS_Store
+.vscode/
+
+# Test coverage reports
+coverage/
+
+# Temporary files
+tmp/
+
+.bmad-core/
+.bmad-infrastructure-devops/
+.clinerules/
+.gemini/
+.github/
+.vscode/
+docs/*
+docs
