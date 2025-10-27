@@ -1,5 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import authRouter from './routes/auth.js';
 
 dotenv.config();
 
@@ -13,6 +14,9 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.json({ message: 'EduProfile API is running!' });
 });
+
+// Auth routes
+app.use('/api/auth', authRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [
