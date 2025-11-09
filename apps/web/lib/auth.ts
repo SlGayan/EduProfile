@@ -32,23 +32,64 @@ const MOCK_USERS: MockUser[] = [
   },
 ]
 
-export function mockLogin(email: string): MockUser | null {
-  // Accept any password for demo purposes
+function storeUser(user: MockUser | null) {
+  if (typeof window !== "undefined") {
+    if (user) {
+      localStorage.setItem("eduprofile_user", JSON.stringify(user))
+    } else {
+      localStorage.removeItem("eduprofile_user")
+    }
+  }
+}
+export { storeUser }
+
+export async function login(email: string, password: string): Promise<MockUser> {
+  // Try the real API first
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    })
+
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null)
+      const message = payload?.message || `Login failed (${res.status})`
+      throw new Error(message)
+    }
+
+    const data = await res.json()
+    // Expecting { user: { id, name, email, role } }
+    if (!data || !data.user) throw new Error("Invalid response from server")
+
+    const user: MockUser = data.user
+    storeUser(user)
+    return user
+  } catch (err) {
+    // On network error or missing API, fall back to mock login for demo
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e: any = err
+    if (e?.message && e.message.includes("Failed to fetch")) {
+      const user = mockLogin(email, password)
+      if (user) return user
+    }
+    throw err
+  }
+}
+
+export function mockLogin(email: string, _password?: string): MockUser | null {
+  // Accept any password for demo purposes (password parameter kept for parity with callers)
   const user = MOCK_USERS.find((u) => u.email === email)
   if (user) {
     // Store user in localStorage
-    if (typeof window !== "undefined") {
-      localStorage.setItem("eduprofile_user", JSON.stringify(user))
-    }
+    storeUser(user)
     return user
   }
   return null
 }
 
 export function mockLogout(): void {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("eduprofile_user")
-  }
+  storeUser(null)
 }
 
 export function getCurrentUser(): MockUser | null {
