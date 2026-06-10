@@ -1,33 +1,53 @@
 import { create } from "zustand"
-import type { MockUser } from "./auth"
-import { getCurrentUser, storeUser, mockLogout } from "./auth"
+import { persist } from "zustand/middleware"
+import type { User } from "./types"
+import { isTokenExpired, mockLogout } from "./auth"
 
 interface AuthState {
-  user: MockUser | null
-  setUser: (u: MockUser | null) => void
+  user: User | null
+  isAuthenticated: boolean
+  setUser: (u: User | null) => void
   clearUser: () => void
 }
 
-// Initialize from localStorage (if present) and keep storage in sync
-export const useAuthStore = create<AuthState>((set) => ({
-  user: getCurrentUser(),
-  setUser: (u: MockUser | null) => {
-    // persist through the same helper used by auth utilities
-    try {
-      storeUser(u)
-    } catch {
-      // ignore storage errors (e.g., SSR or storage blocked)
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      isAuthenticated: false,
+
+      setUser: (u: User | null) => {
+        // Guard against expired tokens being set
+        if (u && isTokenExpired(u)) {
+          set(() => ({ user: null, isAuthenticated: false }))
+          return
+        }
+        set(() => ({ user: u, isAuthenticated: u !== null }))
+      },
+
+      clearUser: () => {
+        try {
+          mockLogout()
+        } catch (error) {
+          console.warn("Failed to clear auth data:", error)
+        }
+        set(() => ({ user: null, isAuthenticated: false }))
+      },
+    }),
+    {
+      name: "eduprofile_user", // localStorage key — keeps backward compat
+      // Only persist user; isAuthenticated is derived on rehydration
+      partialize: (state) => ({ user: state.user }),
+      // On rehydration, re-derive isAuthenticated and evict expired tokens
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        if (state.user && isTokenExpired(state.user)) {
+          state.user = null
+          state.isAuthenticated = false
+        } else {
+          state.isAuthenticated = state.user !== null
+        }
+      },
     }
-    set(() => ({ user: u }))
-  },
-  clearUser: () => {
-    try {
-      // keep same semantics as mockLogout
-      storeUser(null)
-      mockLogout()
-    } catch {
-      // ignore
-    }
-    set(() => ({ user: null }))
-  },
-}))
+  )
+)
