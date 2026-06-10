@@ -1,11 +1,9 @@
-export interface MockUser {
-  id: string
-  name: string
-  email: string
-  role: "teacher" | "admin" | "principal" | "student"
-}
+import type { User } from "./types"
 
-const MOCK_USERS: MockUser[] = [
+// Re-export for backwards compat (tests import MockUser from here)
+export type { User as MockUser }
+
+const MOCK_USERS: User[] = [
   {
     id: "1",
     name: "John Doe",
@@ -32,7 +30,7 @@ const MOCK_USERS: MockUser[] = [
   },
 ]
 
-function storeUser(user: MockUser | null) {
+function storeUser(user: User | null) {
   if (typeof window !== "undefined") {
     if (user) {
       localStorage.setItem("eduprofile_user", JSON.stringify(user))
@@ -43,7 +41,15 @@ function storeUser(user: MockUser | null) {
 }
 export { storeUser }
 
-export async function login(email: string, password: string): Promise<MockUser> {
+/**
+ * Check if a user's token has expired
+ */
+export function isTokenExpired(user: User | null): boolean {
+  if (!user || !user.tokenExpiry) return false
+  return Date.now() >= user.tokenExpiry
+}
+
+export async function login(email: string, password: string): Promise<User> {
   // Try the real API first
   try {
     const res = await fetch("/api/auth/login", {
@@ -59,10 +65,13 @@ export async function login(email: string, password: string): Promise<MockUser> 
     }
 
     const data = await res.json()
-    // Expecting { user: { id, name, email, role } }
+    // Expecting { user: { id, name, email, role }, tokenExpiry?: number }
     if (!data || !data.user) throw new Error("Invalid response from server")
 
-    const user: MockUser = data.user
+    const user: User = {
+      ...data.user,
+      tokenExpiry: data.tokenExpiry || Date.now() + 24 * 60 * 60 * 1000, // Default 24h expiry
+    }
     storeUser(user)
     return user
   } catch (err) {
@@ -77,13 +86,18 @@ export async function login(email: string, password: string): Promise<MockUser> 
   }
 }
 
-export function mockLogin(email: string, _password?: string): MockUser | null {
+export function mockLogin(email: string, _password?: string): User | null {
   // Accept any password for demo purposes (password parameter kept for parity with callers)
   const user = MOCK_USERS.find((u) => u.email === email)
   if (user) {
+    // Add token expiry for demo (24 hours from now)
+    const userWithExpiry: User = {
+      ...user,
+      tokenExpiry: Date.now() + 24 * 60 * 60 * 1000,
+    }
     // Store user in localStorage
-    storeUser(user)
-    return user
+    storeUser(userWithExpiry)
+    return userWithExpiry
   }
   return null
 }
@@ -92,12 +106,19 @@ export function mockLogout(): void {
   storeUser(null)
 }
 
-export function getCurrentUser(): MockUser | null {
+export function getCurrentUser(): User | null {
   if (typeof window !== "undefined") {
     const userStr = localStorage.getItem("eduprofile_user")
     if (userStr) {
       try {
-        return JSON.parse(userStr)
+        const user = JSON.parse(userStr) as User
+        // Check if token has expired
+        if (isTokenExpired(user)) {
+          // Auto-logout if expired
+          storeUser(null)
+          return null
+        }
+        return user
       } catch {
         return null
       }
