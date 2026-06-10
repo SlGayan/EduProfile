@@ -16,11 +16,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { MoreHorizontal, Plus, Shield } from "lucide-react"
-import { UserRole, Permission, type User } from "@/lib/types"
+import { UserRole, Permission } from "@/lib/types"
+
+// Local type for user management records (separate from auth session User)
+interface AdminUser {
+  id: number
+  name: string
+  email: string
+  role: UserRole
+  status: "Active" | "Inactive"
+  permissions?: Permission[]
+}
 import { useState } from "react"
 
 // Mock data with permissions
-const users: User[] = [
+const users: AdminUser[] = [
   {
     id: 1,
     name: "John Doe",
@@ -88,14 +98,14 @@ const users: User[] = [
 
 export default function UserManagementPage() {
   const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedPermissions, setSelectedPermissions] = useState<Permission[]>([])
 
   const teachers = users.filter((u) => u.role === UserRole.TEACHER)
   const principals = users.filter((u) => u.role === UserRole.PRINCIPAL)
   const students = users.filter((u) => u.role === UserRole.STUDENT)
 
-  const handleManagePermissions = (user: User) => {
+  const handleManagePermissions = (user: AdminUser) => {
     setSelectedUser(user)
     setSelectedPermissions(user.permissions || [])
     setPermissionsDialogOpen(true)
@@ -107,7 +117,7 @@ export default function UserManagementPage() {
     )
   }
 
-  const UserTable = ({ users }: { users: User[] }) => (
+  const UserTable = ({ users }: { users: AdminUser[] }) => (
     <Table>
       <TableHeader>
         <TableRow>

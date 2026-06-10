@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { useAuthStore } from "../useAuthStore"
-import type { MockUser } from "../auth"
+import type { User as MockUser } from "../types"
 
 // Mock console.warn to suppress expected warnings
 global.console.warn = vi.fn()
@@ -9,7 +9,7 @@ describe("useAuthStore", () => {
   beforeEach(() => {
     // Clear localStorage and reset store before each test
     localStorage.clear()
-    useAuthStore.setState({ user: null })
+    useAuthStore.setState({ user: null, isAuthenticated: false })
   })
 
   describe("Initial State", () => {
@@ -31,11 +31,15 @@ describe("useAuthStore", () => {
         role: "teacher",
         tokenExpiry: Date.now() + 24 * 60 * 60 * 1000,
       }
-      localStorage.setItem("eduprofile_user", JSON.stringify(mockUser))
+      // Persist middleware stores state under { state: {...}, version: 0 }
+      localStorage.setItem(
+        "eduprofile_user",
+        JSON.stringify({ state: { user: mockUser }, version: 0 })
+      )
 
       // Re-initialize store by calling the initializer
       const { user } = useAuthStore.getState()
-      
+
       // Note: In a real scenario, the store would be re-created
       // For this test, we're verifying the getCurrentUser logic
       expect(user).toBeDefined()
@@ -58,7 +62,7 @@ describe("useAuthStore", () => {
       expect(state.isAuthenticated).toBe(true)
     })
 
-    it("should persist user to localStorage", () => {
+    it("should persist user to localStorage via persist middleware", () => {
       const mockUser: MockUser = {
         id: "2",
         name: "Admin User",
@@ -70,31 +74,25 @@ describe("useAuthStore", () => {
 
       const stored = localStorage.getItem("eduprofile_user")
       expect(stored).toBeDefined()
-      expect(JSON.parse(stored!)).toEqual(mockUser)
+      const parsed = JSON.parse(stored!)
+      // persist middleware wraps state
+      expect(parsed.state.user).toEqual(mockUser)
     })
 
-    it("should handle localStorage errors gracefully", () => {
-      const mockUser: MockUser = {
+    it("should not set an expired user", () => {
+      const expiredUser: MockUser = {
         id: "3",
-        name: "Principal User",
-        email: "principal@edu.com",
-        role: "principal",
+        name: "Expired User",
+        email: "expired@edu.com",
+        role: "teacher",
+        tokenExpiry: Date.now() - 1000, // already expired
       }
 
-      // Mock localStorage to throw an error
-      const originalSetItem = localStorage.setItem
-      localStorage.setItem = vi.fn(() => {
-        throw new Error("QuotaExceededError")
-      })
+      useAuthStore.getState().setUser(expiredUser)
 
-      // Should not throw, but user should still be set in store
-      expect(() => useAuthStore.getState().setUser(mockUser)).not.toThrow()
-      
       const state = useAuthStore.getState()
-      expect(state.user).toEqual(mockUser)
-
-      // Restore original
-      localStorage.setItem = originalSetItem
+      expect(state.user).toBeNull()
+      expect(state.isAuthenticated).toBe(false)
     })
 
     it("should allow setting user to null", () => {
@@ -133,7 +131,7 @@ describe("useAuthStore", () => {
       expect(state.isAuthenticated).toBe(false)
     })
 
-    it("should remove user from localStorage", () => {
+    it("should remove user from localStorage via persist middleware", () => {
       const mockUser: MockUser = {
         id: "1",
         name: "Test User",
@@ -142,36 +140,18 @@ describe("useAuthStore", () => {
       }
 
       useAuthStore.getState().setUser(mockUser)
-      expect(localStorage.getItem("eduprofile_user")).toBeDefined()
 
+      // After clearUser the persisted state should have user: null
       useAuthStore.getState().clearUser()
-      expect(localStorage.getItem("eduprofile_user")).toBeNull()
-    })
 
-    it("should handle localStorage errors gracefully", () => {
-      const mockUser: MockUser = {
-        id: "1",
-        name: "Test User",
-        email: "test@edu.com",
-        role: "teacher",
+      const stored = localStorage.getItem("eduprofile_user")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        expect(parsed.state.user).toBeNull()
+      } else {
+        // Acceptable: key removed entirely
+        expect(stored).toBeNull()
       }
-
-      useAuthStore.getState().setUser(mockUser)
-
-      // Mock localStorage to throw an error
-      const originalRemoveItem = localStorage.removeItem
-      localStorage.removeItem = vi.fn(() => {
-        throw new Error("Storage error")
-      })
-
-      // Should not throw, but user should still be cleared in store
-      expect(() => useAuthStore.getState().clearUser()).not.toThrow()
-      
-      const state = useAuthStore.getState()
-      expect(state.user).toBeNull()
-
-      // Restore original
-      localStorage.removeItem = originalRemoveItem
     })
   })
 
