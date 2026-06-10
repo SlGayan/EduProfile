@@ -1,12 +1,9 @@
-export interface MockUser {
-  id: string
-  name: string
-  email: string
-  role: "teacher" | "admin" | "principal" | "student"
-  tokenExpiry?: number // Unix timestamp in milliseconds
-}
+import type { User } from "./types"
 
-const MOCK_USERS: MockUser[] = [
+// Re-export for backwards compat (tests import MockUser from here)
+export type { User as MockUser }
+
+const MOCK_USERS: User[] = [
   {
     id: "1",
     name: "John Doe",
@@ -33,7 +30,7 @@ const MOCK_USERS: MockUser[] = [
   },
 ]
 
-function storeUser(user: MockUser | null) {
+function storeUser(user: User | null) {
   if (typeof window !== "undefined") {
     if (user) {
       localStorage.setItem("eduprofile_user", JSON.stringify(user))
@@ -47,12 +44,12 @@ export { storeUser }
 /**
  * Check if a user's token has expired
  */
-export function isTokenExpired(user: MockUser | null): boolean {
+export function isTokenExpired(user: User | null): boolean {
   if (!user || !user.tokenExpiry) return false
   return Date.now() >= user.tokenExpiry
 }
 
-export async function login(email: string, password: string): Promise<MockUser> {
+export async function login(email: string, password: string): Promise<User> {
   // Try the real API first
   try {
     const res = await fetch("/api/auth/login", {
@@ -71,7 +68,7 @@ export async function login(email: string, password: string): Promise<MockUser> 
     // Expecting { user: { id, name, email, role }, tokenExpiry?: number }
     if (!data || !data.user) throw new Error("Invalid response from server")
 
-    const user: MockUser = {
+    const user: User = {
       ...data.user,
       tokenExpiry: data.tokenExpiry || Date.now() + 24 * 60 * 60 * 1000, // Default 24h expiry
     }
@@ -89,12 +86,12 @@ export async function login(email: string, password: string): Promise<MockUser> 
   }
 }
 
-export function mockLogin(email: string, _password?: string): MockUser | null {
+export function mockLogin(email: string, _password?: string): User | null {
   // Accept any password for demo purposes (password parameter kept for parity with callers)
   const user = MOCK_USERS.find((u) => u.email === email)
   if (user) {
     // Add token expiry for demo (24 hours from now)
-    const userWithExpiry: MockUser = {
+    const userWithExpiry: User = {
       ...user,
       tokenExpiry: Date.now() + 24 * 60 * 60 * 1000,
     }
@@ -109,12 +106,12 @@ export function mockLogout(): void {
   storeUser(null)
 }
 
-export function getCurrentUser(): MockUser | null {
+export function getCurrentUser(): User | null {
   if (typeof window !== "undefined") {
     const userStr = localStorage.getItem("eduprofile_user")
     if (userStr) {
       try {
-        const user = JSON.parse(userStr) as MockUser
+        const user = JSON.parse(userStr) as User
         // Check if token has expired
         if (isTokenExpired(user)) {
           // Auto-logout if expired
