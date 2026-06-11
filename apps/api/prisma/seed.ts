@@ -5,19 +5,27 @@ const prisma = new PrismaClient();
 
 async function main() {
   const rounds = parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10);
-  const hashedPassword = await bcrypt.hash('adminpassword', rounds);
+  const hashedPassword = await bcrypt.hash('password123', rounds);
 
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@example.com' },
-    update: {},
-    create: {
-      email: 'admin@example.com',
-      password: hashedPassword,
-      role: 'ADMINISTRATOR',
-    },
-  });
+  const users = [
+    { email: 'teacher@edu.com', role: 'TEACHER' },
+    { email: 'principal@edu.com', role: 'PRINCIPAL' },
+    { email: 'admin@edu.com', role: 'ADMINISTRATOR' },
+    { email: 'student@edu.com', role: 'STUDENT' },
+  ];
 
-  console.log('Admin user created:', admin);
+  for (const userData of users) {
+    const user = await prisma.user.upsert({
+      where: { email: userData.email },
+      update: {},
+      create: {
+        email: userData.email,
+        password: hashedPassword,
+        role: userData.role as any,
+      },
+    });
+    console.log(`${userData.role} user created:`, user.email);
+  }
 }
 
 main()
