@@ -34,8 +34,14 @@ function storeUser(user: User | null) {
   if (typeof window !== "undefined") {
     if (user) {
       localStorage.setItem("eduprofile_user", JSON.stringify(user))
+      // Set cookies for middleware
+      document.cookie = `eduprofile_role=${user.role}; path=/; max-age=${30 * 24 * 60 * 60}`
+      document.cookie = `eduprofile_user=${JSON.stringify(user)}; path=/; max-age=${30 * 24 * 60 * 60}`
     } else {
       localStorage.removeItem("eduprofile_user")
+      // Remove cookies
+      document.cookie = "eduprofile_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      document.cookie = "eduprofile_user=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
     }
   }
 }

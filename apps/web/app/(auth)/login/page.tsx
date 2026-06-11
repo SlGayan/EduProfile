@@ -4,10 +4,7 @@ import React from "react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-<<<<<<< Updated upstream
-=======
 import Link from "next/link"
->>>>>>> Stashed changes
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -19,11 +16,7 @@ import { login } from "@/lib/auth"
 import { useAuthStore } from "@/lib/useAuthStore"
 
 const loginSchema = z.object({
-<<<<<<< Updated upstream
-  email: z.string().email("Invalid email format"),
-=======
   email: z.string().email("Invalid email format").endsWith("@edu.com", "Invalid email format"),
->>>>>>> Stashed changes
   password: z.string().min(1, "Password is required"),
 })
 
@@ -39,9 +32,6 @@ export default function LoginPage() {
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
-<<<<<<< Updated upstream
-  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) })
-=======
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -49,17 +39,12 @@ export default function LoginPage() {
       password: "",
     }
   })
->>>>>>> Stashed changes
 
   const onSubmit = async (values: LoginForm) => {
     try {
       const user = await login(values.email, values.password)
       setUser(user)
-<<<<<<< Updated upstream
       toast({ title: "Signed in", description: `Welcome back, ${user.name}` })
-=======
-      toast({ title: "Signed in", description: `Welcome back` })
->>>>>>> Stashed changes
 
       // role-based routing
       if (user.role === "teacher") router.push("/teacher/dashboard")
@@ -68,15 +53,8 @@ export default function LoginPage() {
       else router.push("/admin/users")
     } catch (err: unknown) {
       const e = err as Error
-<<<<<<< Updated upstream
-      // Show friendly toast
       toast({ title: "Login failed", description: e?.message || "Network error" })
 
-      // If it's a validation-like message from API, set field errors
-=======
-      toast({ title: "Login failed", description: e?.message || "Network error" })
-
->>>>>>> Stashed changes
       if (e?.message?.toLowerCase().includes("password")) {
         setError("password", { message: e.message })
       } else if (e?.message?.toLowerCase().includes("email")) {
@@ -93,21 +71,12 @@ export default function LoginPage() {
 
       <form onSubmit={handleSubmit(onSubmit)} aria-describedby="login-error">
         <CardContent className="space-y-4">
-<<<<<<< Updated upstream
-          {/* Global form error area (for server/network messages) */}
-
-=======
->>>>>>> Stashed changes
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
-<<<<<<< Updated upstream
-              placeholder="Enter your email"
-=======
               placeholder="name@edu.com"
->>>>>>> Stashed changes
               aria-invalid={!!errors.email}
               aria-describedby={errors.email ? "email-error" : undefined}
               {...register("email")}
@@ -146,11 +115,7 @@ export default function LoginPage() {
           </div>
         </CardContent>
 
-<<<<<<< Updated upstream
-        <CardFooter>
-=======
         <CardFooter className="flex flex-col space-y-4">
->>>>>>> Stashed changes
           <Button type="submit" className="w-full" disabled={isSubmitting} aria-busy={isSubmitting}>
             {isSubmitting ? "Signing in..." : "Log in"}
           </Button>
