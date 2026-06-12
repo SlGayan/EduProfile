@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, vi, type Mock } from "vitest"
 import {
   login,
   mockLogin,
@@ -183,7 +183,7 @@ describe("Auth Utilities", () => {
         tokenExpiry: Date.now() + 24 * 60 * 60 * 1000,
       }
 
-      ;(global.fetch as any).mockResolvedValueOnce({
+      ;(global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => mockResponse,
       })
@@ -204,7 +204,7 @@ describe("Auth Utilities", () => {
     })
 
     it("should throw error for failed API response", async () => {
-      ;(global.fetch as any).mockResolvedValueOnce({
+      ;(global.fetch as Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
         json: async () => ({ message: "Invalid credentials" }),
@@ -214,7 +214,7 @@ describe("Auth Utilities", () => {
     })
 
     it("should fallback to mock login on network error", async () => {
-      ;(global.fetch as any).mockRejectedValueOnce(new Error("Failed to fetch"))
+      ;(global.fetch as Mock).mockRejectedValueOnce(new Error("Failed to fetch"))
 
       const user = await login("teacher@edu.com", "anypassword")
 
@@ -234,7 +234,7 @@ describe("Auth Utilities", () => {
         tokenExpiry: Date.now() + 24 * 60 * 60 * 1000,
       }
 
-      ;(global.fetch as any).mockResolvedValueOnce({
+      ;(global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => mockResponse,
       })
@@ -259,7 +259,7 @@ describe("Auth Utilities", () => {
         // No tokenExpiry
       }
 
-      ;(global.fetch as any).mockResolvedValueOnce({
+      ;(global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => mockResponse,
       })
@@ -274,7 +274,7 @@ describe("Auth Utilities", () => {
     })
 
     it("should throw error for invalid API response format", async () => {
-      ;(global.fetch as any).mockResolvedValueOnce({
+      ;(global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ invalid: "response" }),
       })
