@@ -54,6 +54,8 @@ coverage/
 # Temporary files
 tmp/
 
+
+_bmad/
 .bmad-core/
 .bmad-infrastructure-devops/
 .clinerules/
@@ -62,3 +64,6 @@ tmp/
 .vscode/
 docs/*
 docs
+.agents/
+.agent/
+.claude/
