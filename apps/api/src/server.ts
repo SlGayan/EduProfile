@@ -1,6 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import authRouter from './routes/auth.js';
+import usersRouter from './routes/users.js';
 
 dotenv.config();
 
@@ -17,6 +18,9 @@ app.get('/', (req, res) => {
 
 // Auth routes
 app.use('/api/auth', authRouter);
+
+// User management routes
+app.use('/api/users', usersRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [
