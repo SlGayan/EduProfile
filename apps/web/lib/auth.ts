@@ -66,7 +66,7 @@ export async function login(email: string, password: string): Promise<User> {
 
     if (!res.ok) {
       const payload = await res.json().catch(() => null)
-      const message = payload?.message || `Login failed (${res.status})`
+      const message = payload?.error || payload?.message || `Login failed (${res.status})`
       throw new Error(message)
     }
 
@@ -76,6 +76,7 @@ export async function login(email: string, password: string): Promise<User> {
 
     const user: User = {
       ...data.user,
+      token: data.token,
       tokenExpiry: data.tokenExpiry || Date.now() + 24 * 60 * 60 * 1000, // Default 24h expiry
     }
     storeUser(user)

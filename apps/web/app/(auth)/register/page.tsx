@@ -17,7 +17,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 // Define validation schema
 const registerSchema = z.object({
   email: z.string().email("Please enter a valid email address.").endsWith("@edu.com", "Invalid email format"),
-  password: z.string().min(6, "Password must be at least 6 characters."),
+  password: z
+    .string()
+    .min(6, "Password must be at least 6 characters.")
+    .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password must contain at least one letter and one number."),
   confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters."),
   role: z.enum(["STUDENT", "TEACHER", "PRINCIPAL", "ADMINISTRATOR"], { required_error: "Please select a role." }),
 }).refine((data) => data.password === data.confirmPassword, {
