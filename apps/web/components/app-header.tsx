@@ -53,7 +53,7 @@ export function AppHeader() {
                 <AvatarImage src="/abstract-geometric-shapes.png" alt="User" />
                 <AvatarFallback>
                   {user?.name
-                    .split(" ")
+                    ?.split(" ")
                     .map((n) => n[0])
                     .join("")
                     .toUpperCase() || "U"}
