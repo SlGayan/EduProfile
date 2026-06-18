@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
+import classesRouter from './routes/classes.js';
 
 dotenv.config();
 
@@ -21,6 +22,9 @@ app.use('/api/auth', authRouter);
 
 // User management routes
 app.use('/api/users', usersRouter);
+
+// Class management routes
+app.use('/api/classes', classesRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [
@@ -62,30 +66,6 @@ const mockTeachers = [
     classes: [{ id: 1, name: 'Grade 10-A' }]
   }
 ];
-
-// Classes routes
-app.get('/api/classes', async (req, res) => {
-  try {
-    res.json(mockClasses);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch classes' });
-  }
-});
-
-app.get('/api/classes/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const classData = mockClasses.find(c => c.id === parseInt(id));
-
-    if (!classData) {
-      return res.status(404).json({ error: 'Class not found' });
-    }
-
-    res.json(classData);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch class' });
-  }
-});
 
 // Students routes
 app.get('/api/students', async (req, res) => {
