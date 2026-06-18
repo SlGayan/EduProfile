@@ -7,16 +7,15 @@ import { createUserSchema, updateUserSchema } from '../validators/userValidators
 const prisma = new PrismaClient();
 const router = Router();
 
-// Middleware to protect all user routes
 router.use(verifyToken);
-router.use(requireRole(['ADMINISTRATOR']));
 
 /**
  * GET /api/users
  * Returns a list of all active (non-deleted) users
  * Excludes passwords from response
+ * Accessible to ADMINISTRATOR and PRINCIPAL (read-only for PRINCIPAL)
  */
-router.get('/', async (req: AuthRequest, res) => {
+router.get('/', requireRole(['ADMINISTRATOR', 'PRINCIPAL']), async (req: AuthRequest, res) => {
   try {
     const users = await prisma.user.findMany({
       where: {
@@ -45,7 +44,7 @@ router.get('/', async (req: AuthRequest, res) => {
  * Creates a new user
  * Validates input and hashes password
  */
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) => {
   try {
     const parsed = createUserSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -98,7 +97,7 @@ router.post('/', async (req: AuthRequest, res) => {
  * Updates an existing user
  * Can update email, password, and/or role
  */
-router.put('/:id', async (req: AuthRequest, res) => {
+router.put('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) => {
   try {
     const id = req.params.id;
     if (!id) {
@@ -180,7 +179,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
  * Performs a soft delete by setting deletedAt timestamp
  * Prevents cascading deletion of related data
  */
-router.delete('/:id', async (req: AuthRequest, res) => {
+router.delete('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) => {
   try {
     const id = req.params.id;
     if (!id) {
