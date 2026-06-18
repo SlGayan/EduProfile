@@ -35,7 +35,7 @@ router.post('/', async (req: AuthRequest, res) => {
             return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
         }
 
-        const { name, teacherId } = parsed.data;
+        const { name, year, teacherId } = parsed.data;
 
         if (teacherId) {
             const teacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
@@ -45,6 +45,7 @@ router.post('/', async (req: AuthRequest, res) => {
         const newClass = await prisma.class.create({
             data: {
                 name,
+                year: year ?? null,
                 teacherId: teacherId ?? null,
             },
             include: { teacher: true }
@@ -89,7 +90,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
             return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
         }
 
-        const { name, teacherId } = parsed.data;
+        const { name, year, teacherId } = parsed.data;
 
         const existing = await prisma.class.findUnique({ where: { id } });
         if (!existing) return res.status(404).json({ error: 'Class not found' });
@@ -103,6 +104,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
             where: { id },
             data: {
                 ...(name !== undefined && { name }),
+                ...(year !== undefined && { year }),
                 ...(teacherId !== undefined && { teacherId })
             },
         });
