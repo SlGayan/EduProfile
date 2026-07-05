@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import classesRouter from './routes/classes.js';
+import studentsRouter from './routes/students.js';
 
 dotenv.config();
 
@@ -25,6 +26,9 @@ app.use('/api/users', usersRouter);
 
 // Class management routes
 app.use('/api/classes', classesRouter);
+
+// Student management routes (bulk import)
+app.use('/api/students', studentsRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [
