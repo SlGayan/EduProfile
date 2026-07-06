@@ -4,6 +4,7 @@ import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import classesRouter from './routes/classes.js';
 import studentsRouter from './routes/students.js';
+import marksRouter from './modules/marks/marks.routes.js';
 
 dotenv.config();
 
@@ -29,6 +30,9 @@ app.use('/api/classes', classesRouter);
 
 // Student management routes (bulk import)
 app.use('/api/students', studentsRouter);
+
+// Marks management routes (bulk import)
+app.use('/api/marks', marksRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [

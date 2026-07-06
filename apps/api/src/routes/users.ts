@@ -99,7 +99,7 @@ router.post('/', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) =
  */
 router.put('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) => {
   try {
-    const id = req.params.id;
+    const id = req.params.id as string;
     if (!id) {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
@@ -181,7 +181,7 @@ router.put('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res)
  */
 router.delete('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) => {
   try {
-    const id = req.params.id;
+    const id = req.params.id as string;
     if (!id) {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
