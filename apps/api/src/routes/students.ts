@@ -11,9 +11,37 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 router.use(verifyToken);
-router.use(requireRole(['ADMINISTRATOR', 'TEACHER']));
 
-router.post('/import', upload.single('file'), async (req: AuthRequest, res) => {
+router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id },
+      include: { user: true, classes: true },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: 'No student profile found for this account' });
+    }
+
+    return res.status(200).json({
+      id: student.id,
+      fullName: student.fullName,
+      indexNumber: student.indexNumber,
+      dateOfBirth: student.dateOfBirth,
+      address: student.address,
+      nicNumber: student.nicNumber,
+      olYear: student.olYear,
+      alYear: student.alYear,
+      email: student.user.email,
+      assignedClass: student.classes[0]?.name ?? null,
+    });
+  } catch (err) {
+    console.error('Error fetching student profile:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single('file'), async (req: AuthRequest, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No CSV file uploaded (expected field name "file")' });
