@@ -105,7 +105,7 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
     let updatedCount = 0;
 
     try {
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         for (const { data } of validRows) {
           const existingStudent = await tx.student.findUnique({
             where: { indexNumber: data.indexNumber },
