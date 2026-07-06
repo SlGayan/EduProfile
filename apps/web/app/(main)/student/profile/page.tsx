@@ -5,21 +5,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
+import { apiFetch } from "@/lib/apiFetch"
 
 interface StudentProfile {
-  id: string
+  id: number
   fullName: string
-  studentId: string
+  indexNumber: string
   dateOfBirth: string
-  nicNumber: string
+  nicNumber: string | null
   address: string
-  assignedClass: string
+  olYear: number | null
+  alYear: number | null
+  assignedClass: string | null
   email: string
-  phoneNumber: string
 }
 
 async function fetchStudentProfile(): Promise<StudentProfile> {
-  const response = await fetch("/api/students/me")
+  const response = await apiFetch("/api/students/me")
   if (!response.ok) {
     throw new Error("Failed to fetch profile")
   }
@@ -86,8 +88,8 @@ export default function StudentProfilePage() {
               <dd className="text-base font-medium">{profile?.fullName}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-sm font-medium text-muted-foreground">Student ID</dt>
-              <dd className="text-base font-medium">{profile?.studentId}</dd>
+              <dt className="text-sm font-medium text-muted-foreground">Index Number</dt>
+              <dd className="text-base font-medium">{profile?.indexNumber}</dd>
             </div>
             <div className="space-y-1">
               <dt className="text-sm font-medium text-muted-foreground">Date of Birth</dt>
@@ -102,12 +104,16 @@ export default function StudentProfilePage() {
               <dd className="text-base font-medium">{profile?.email}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-sm font-medium text-muted-foreground">Phone Number</dt>
-              <dd className="text-base font-medium">{profile?.phoneNumber}</dd>
+              <dt className="text-sm font-medium text-muted-foreground">O/L Year</dt>
+              <dd className="text-base font-medium">{profile?.olYear ?? "N/A"}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-sm font-medium text-muted-foreground">A/L Year</dt>
+              <dd className="text-base font-medium">{profile?.alYear ?? "N/A"}</dd>
             </div>
             <div className="space-y-1">
               <dt className="text-sm font-medium text-muted-foreground">Assigned Class</dt>
-              <dd className="text-base font-medium">{profile?.assignedClass}</dd>
+              <dd className="text-base font-medium">{profile?.assignedClass ?? "N/A"}</dd>
             </div>
             <div className="space-y-1 sm:col-span-2">
               <dt className="text-sm font-medium text-muted-foreground">Address</dt>
