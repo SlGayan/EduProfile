@@ -30,19 +30,20 @@ model User {
 }
 
 model Student {
-  id          Int       @id @default(autoincrement())
-  userId      Int       @unique
-  user        User      @relation(fields: [userId], references: [id])
+  id          Int        @id @default(autoincrement())
+  userId      Int        @unique
+  user        User       @relation(fields: [userId], references: [id])
   fullName    String
-  indexNumber String    @unique
+  indexNumber String     @unique
   dateOfBirth DateTime
   address     String
   nicNumber   String?
   olYear      Int?
   alYear      Int?
   classes     Class[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  termMarks   TermMark[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 }
 
 model Teacher {
@@ -63,4 +64,29 @@ model Class {
   students  Student[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+model Subject {
+  id        Int        @id @default(autoincrement())
+  name      String
+  termMarks TermMark[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model TermMark {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id])
+  subjectId Int
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  term      Int
+  year      Int
+  marks     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, subjectId, term, year])
+  @@index([studentId])
+  @@index([subjectId])
 }
