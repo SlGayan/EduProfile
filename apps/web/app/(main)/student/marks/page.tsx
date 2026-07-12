@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, ArrowUpDown } from "lucide-react"
+import { AlertCircle } from "lucide-react"
+import { apiFetch } from "@/lib/apiFetch"
 
 interface Mark {
   id: string
   subject: string
-  term: string
-  year: string
+  term: number
+  year: number
   marks: number
 }
 
@@ -23,21 +24,40 @@ async function fetchMarks(year?: string, term?: string): Promise<Mark[]> {
   if (year) params.append("year", year)
   if (term) params.append("term", term)
 
-  const response = await fetch(`/api/marks/my-marks?${params.toString()}`)
+  const response = await apiFetch(`/api/marks/my-marks?${params.toString()}`)
   if (!response.ok) {
     throw new Error("Failed to fetch marks")
   }
   return response.json()
 }
 
-type SortField = "subject" | "term" | "year" | "marks"
-type SortOrder = "asc" | "desc"
+interface MarkGroup {
+  year: number
+  term: number
+  marks: Mark[]
+}
+
+function groupMarks(marks: Mark[]): MarkGroup[] {
+  const groupsByKey = new Map<string, MarkGroup>()
+  const orderedGroups: MarkGroup[] = []
+
+  for (const mark of marks) {
+    const key = `${mark.year}-${mark.term}`
+    let group = groupsByKey.get(key)
+    if (!group) {
+      group = { year: mark.year, term: mark.term, marks: [] }
+      groupsByKey.set(key, group)
+      orderedGroups.push(group)
+    }
+    group.marks.push(mark)
+  }
+
+  return orderedGroups
+}
 
 export default function StudentMarksPage() {
   const [selectedYear, setSelectedYear] = useState<string>("")
   const [selectedTerm, setSelectedTerm] = useState<string>("")
-  const [sortField, setSortField] = useState<SortField>("subject")
-  const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
 
   const {
     data: marks,
@@ -48,33 +68,10 @@ export default function StudentMarksPage() {
     queryFn: () => fetchMarks(selectedYear || undefined, selectedTerm || undefined),
   })
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-    } else {
-      setSortField(field)
-      setSortOrder("asc")
-    }
-  }
-
-  const sortedMarks = marks
-    ? [...marks].sort((a, b) => {
-        let aValue = a[sortField]
-        let bValue = b[sortField]
-
-        if (sortField === "marks") {
-          aValue = Number(aValue)
-          bValue = Number(bValue)
-        }
-
-        if (aValue < bValue) return sortOrder === "asc" ? -1 : 1
-        if (aValue > bValue) return sortOrder === "asc" ? 1 : -1
-        return 0
-      })
-    : []
-
   const years = ["2023", "2024", "2025"]
-  const terms = ["Term 1", "Term 2", "Term 3"]
+  const terms = [1, 2, 3]
+
+  const groupedMarks = marks ? groupMarks(marks) : []
 
   return (
     <div className="space-y-6">
@@ -117,8 +114,8 @@ export default function StudentMarksPage() {
                 <SelectContent>
                   <SelectItem value="all">All Terms</SelectItem>
                   {terms.map((term) => (
-                    <SelectItem key={term} value={term}>
-                      {term}
+                    <SelectItem key={term} value={String(term)}>
+                      {`Term ${term}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -155,7 +152,7 @@ export default function StudentMarksPage() {
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>Failed to load marks. Please try again later.</AlertDescription>
             </Alert>
-          ) : sortedMarks.length === 0 ? (
+          ) : groupedMarks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-lg font-medium">No marks found</p>
@@ -166,59 +163,32 @@ export default function StudentMarksPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("subject")}
-                        className="flex items-center gap-1 px-0 hover:bg-transparent"
-                      >
-                        Subject
-                        <ArrowUpDown className="h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("term")}
-                        className="flex items-center gap-1 px-0 hover:bg-transparent"
-                      >
-                        Term
-                        <ArrowUpDown className="h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("year")}
-                        className="flex items-center gap-1 px-0 hover:bg-transparent"
-                      >
-                        Year
-                        <ArrowUpDown className="h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("marks")}
-                        className="flex items-center gap-1 px-0 hover:bg-transparent"
-                      >
-                        Marks
-                        <ArrowUpDown className="h-4 w-4" />
-                      </Button>
-                    </TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead>Term</TableHead>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Marks</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedMarks.map((mark) => (
-                    <TableRow key={mark.id}>
-                      <TableCell className="font-medium">{mark.subject}</TableCell>
-                      <TableCell>{mark.term}</TableCell>
-                      <TableCell>{mark.year}</TableCell>
-                      <TableCell>
-                        <span className="font-semibold">{mark.marks}</span>
-                        <span className="text-muted-foreground">/100</span>
-                      </TableCell>
-                    </TableRow>
+                  {groupedMarks.map((group) => (
+                    <Fragment key={`${group.year}-${group.term}`}>
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableCell colSpan={4} className="font-semibold">
+                          {`Year ${group.year} — Term ${group.term}`}
+                        </TableCell>
+                      </TableRow>
+                      {group.marks.map((mark) => (
+                        <TableRow key={mark.id}>
+                          <TableCell className="font-medium">{mark.subject}</TableCell>
+                          <TableCell>{mark.term}</TableCell>
+                          <TableCell>{mark.year}</TableCell>
+                          <TableCell>
+                            <span className="font-semibold">{mark.marks}</span>
+                            <span className="text-muted-foreground">/100</span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </Fragment>
                   ))}
                 </TableBody>
               </Table>

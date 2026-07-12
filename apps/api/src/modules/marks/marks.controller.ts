@@ -17,6 +17,9 @@ const markRowSchema = z.object({
 
 type MarkRow = z.infer<typeof markRowSchema>;
 
+const myMarksYearSchema = z.coerce.number().int().min(2000).max(2100);
+const myMarksTermSchema = z.coerce.number().int().min(1).max(3);
+
 export const importMarks = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) {
@@ -142,6 +145,69 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
 
   } catch (err: any) {
     console.error('Import marks error:', err);
+    return res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+};
+
+export const getMyMarks = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user.id },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    const { year, term } = req.query;
+
+    if ((year !== undefined && typeof year !== 'string') || (term !== undefined && typeof term !== 'string')) {
+      return res.status(400).json({ error: 'Invalid year or term parameter' });
+    }
+
+    let yearFilter: { year?: number } = {};
+    if (year && year !== 'all') {
+      const parsedYear = myMarksYearSchema.safeParse(year);
+      if (!parsedYear.success) {
+        return res.status(400).json({ error: 'Invalid year parameter' });
+      }
+      yearFilter = { year: parsedYear.data };
+    }
+
+    let termFilter: { term?: number } = {};
+    if (term && term !== 'all') {
+      const parsedTerm = myMarksTermSchema.safeParse(term);
+      if (!parsedTerm.success) {
+        return res.status(400).json({ error: 'Invalid term parameter' });
+      }
+      termFilter = { term: parsedTerm.data };
+    }
+
+    const termMarks = await prisma.termMark.findMany({
+      where: {
+        studentId: student.id,
+        ...yearFilter,
+        ...termFilter,
+      },
+      include: { subject: true },
+      orderBy: [{ year: 'desc' }, { term: 'asc' }, { subject: { name: 'asc' } }],
+    });
+
+    return res.status(200).json(
+      termMarks.map((m) => ({
+        id: String(m.id),
+        subject: m.subject.name,
+        term: m.term,
+        year: m.year,
+        marks: m.marks,
+      }))
+    );
+  } catch (err: any) {
+    console.error('Get my marks error:', err);
     return res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 };
