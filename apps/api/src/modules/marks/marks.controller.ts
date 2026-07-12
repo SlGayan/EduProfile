@@ -211,3 +211,55 @@ export const getMyMarks = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 };
+
+export const getClassMarks = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId: req.user.id },
+      include: { classes: true },
+    });
+
+    if (!teacher) {
+      return res.status(403).json({ error: 'Teacher profile not found' });
+    }
+
+    const teacherClassIds = teacher.classes.map((c) => c.id);
+    if (teacherClassIds.length === 0) {
+      return res.status(403).json({ error: 'Teacher is not assigned to any classes' });
+    }
+
+    const termMarks = await prisma.termMark.findMany({
+      where: {
+        student: {
+          classes: { some: { id: { in: teacherClassIds } } },
+        },
+      },
+      include: { student: true, subject: true },
+      orderBy: [
+        { student: { fullName: 'asc' } },
+        { subject: { name: 'asc' } },
+        { year: 'desc' },
+        { term: 'asc' },
+      ],
+    });
+
+    return res.status(200).json(
+      termMarks.map((m) => ({
+        id: String(m.id),
+        studentName: m.student.fullName,
+        studentIndexNumber: m.student.indexNumber,
+        subject: m.subject.name,
+        term: m.term,
+        year: m.year,
+        marks: m.marks,
+      }))
+    );
+  } catch (err: any) {
+    console.error('Get class marks error:', err);
+    return res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+};
