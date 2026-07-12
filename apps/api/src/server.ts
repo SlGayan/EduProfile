@@ -129,15 +129,6 @@ app.get('/api/marks', async (req, res) => {
   }
 });
 
-app.get('/api/marks/my-marks', async (req, res) => {
-  try {
-    // Mock current user - in real app this would come from auth
-    res.json([]);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch marks' });
-  }
-});
-
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 EduProfile API server running on port ${PORT}`);
