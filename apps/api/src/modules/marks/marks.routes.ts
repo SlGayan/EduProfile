@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticateToken, requireRole } from '../../middleware/auth.js';
-import { importMarks, getMyMarks } from './marks.controller.js';
+import { importMarks, getMyMarks, getClassMarks } from './marks.controller.js';
 import multer from 'multer';
 
 const router = Router();
@@ -15,5 +15,7 @@ router.post(
 );
 
 router.get('/my-marks', authenticateToken, requireRole('student'), getMyMarks);
+
+router.get('/class-marks', authenticateToken, requireRole('teacher'), getClassMarks);
 
 export default router;
