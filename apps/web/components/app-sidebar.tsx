@@ -5,6 +5,7 @@ import {
   Users,
   Upload,
   FileText,
+  FileSpreadsheet,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -23,6 +24,7 @@ import { getCurrentUser } from "@/lib/auth"
 const teacherNavItems = [
   { href: "/teacher/dashboard", label: "Dashboard", icon: Home },
   { href: "/teacher/import-students", label: "Import Students", icon: Upload },
+  { href: "/teacher/import-marks", label: "Import Marks", icon: FileSpreadsheet },
   { href: "/teacher/search-students", label: "Search Students", icon: Search },
 ]
 
