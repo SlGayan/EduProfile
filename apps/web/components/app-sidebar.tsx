@@ -13,6 +13,7 @@ import {
   User,
   Award,
   School,
+  BarChart3,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -26,6 +27,7 @@ const teacherNavItems = [
   { href: "/teacher/import-students", label: "Import Students", icon: Upload },
   { href: "/teacher/import-marks", label: "Import Marks", icon: FileSpreadsheet },
   { href: "/teacher/search-students", label: "Search Students", icon: Search },
+  { href: "/teacher/class-marks", label: "Class Marks", icon: BarChart3 },
 ]
 
 const principalNavItems = [
