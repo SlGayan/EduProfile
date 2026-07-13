@@ -50,7 +50,7 @@ export function AppHeader() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full">
               <Avatar>
-                <AvatarImage src="/abstract-geometric-shapes.png" alt="User" />
+                <AvatarImage src="/placeholder-user.jpg" alt="User" />
                 <AvatarFallback>
                   {user?.name
                     ?.split(" ")
