@@ -15,6 +15,7 @@ import {
   School,
   BarChart3,
 } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState, useEffect } from "react"
@@ -92,7 +93,14 @@ export function AppSidebar({
         <div className="flex h-full flex-col">
           {/* Header */}
           <div className="flex h-16 items-center justify-between border-b px-4">
-            {!isCollapsed && <h2 className="text-lg font-semibold text-sidebar-foreground">EduProfile</h2>}
+            {isCollapsed ? (
+              <Image src="/logo.png" alt="EduProfile" width={32} height={32} className="rounded-full" />
+            ) : (
+              <Link href="/" className="flex items-center gap-2">
+                <Image src="/logo.png" alt="EduProfile" width={32} height={32} className="rounded-full" />
+                <h2 className="text-lg font-semibold text-sidebar-foreground">EduProfile</h2>
+              </Link>
+            )}
             <Button
               variant="ghost"
               size="icon"
