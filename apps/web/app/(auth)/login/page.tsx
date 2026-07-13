@@ -4,6 +4,7 @@ import React from "react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
+import Image from "next/image"
 import Link from "next/link"
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -65,7 +66,8 @@ export default function LoginPage() {
 
   return (
     <Card className="w-full max-w-md" aria-live="polite">
-      <CardHeader>
+      <CardHeader className="justify-items-center gap-2">
+        <Image src="/logo.png" alt="EduProfile" width={72} height={72} priority />
         <CardTitle className="text-2xl text-center">EduProfile Login</CardTitle>
       </CardHeader>
 
