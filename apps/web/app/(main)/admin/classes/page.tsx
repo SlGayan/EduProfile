@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -384,10 +384,13 @@ export default function ClassManagementPage() {
 
   // Role guard — only ADMINISTRATOR or PRINCIPAL (stored lowercase in auth)
   const user = getCurrentUser()
-  if (user && user.role !== "admin" && user.role !== "principal") {
-    router.replace("/unauthorized")
-    return null
-  }
+  const isAuthorized = !user || user.role === "admin" || user.role === "principal"
+
+  useEffect(() => {
+    if (!isAuthorized) {
+      router.replace("/unauthorized")
+    }
+  }, [isAuthorized, router])
 
   // Modal state
   const [createOpen, setCreateOpen] = useState(false)
@@ -403,11 +406,13 @@ export default function ClassManagementPage() {
   const { data: classes = [], isLoading, isError } = useQuery({
     queryKey: ["classes"],
     queryFn: fetchClasses,
+    enabled: isAuthorized,
   })
 
   const { data: allUsers = [] } = useQuery({
     queryKey: ["users"],
     queryFn: fetchUsers,
+    enabled: isAuthorized,
   })
 
   const teachers = allUsers.filter(
@@ -415,8 +420,8 @@ export default function ClassManagementPage() {
   )
 
   // Create form
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createForm = useForm<ClassFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(classSchema as any),
     defaultValues: { name: "", year: new Date().getFullYear() },
   })
@@ -446,8 +451,8 @@ export default function ClassManagementPage() {
   })
 
   // Edit form
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const editForm = useForm<ClassFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(classSchema as any),
     defaultValues: { name: "", year: new Date().getFullYear() },
   })
@@ -498,6 +503,10 @@ export default function ClassManagementPage() {
       setDeleteClass(null)
     },
   })
+
+  if (!isAuthorized) {
+    return null
+  }
 
   return (
     <div className="space-y-6">
