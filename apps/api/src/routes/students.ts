@@ -2,13 +2,32 @@ import { Router } from 'express';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
+import rateLimit from 'express-rate-limit';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/authMiddleware.js';
-import { EXPECTED_IMPORT_COLUMNS, studentImportRowSchema } from '../validators/studentValidators.js';
+import {
+  EXPECTED_IMPORT_COLUMNS,
+  studentImportRowSchema,
+  studentSearchQuerySchema,
+} from '../validators/studentValidators.js';
 
 const prisma = new PrismaClient();
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Sized for legitimate interactive staff search (not /login's 5/15min) —
+// blunts NIC-enumeration attempts without hindering normal use.
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many search requests. Please slow down and try again shortly.' },
+});
+
+function escapeLikeWildcards(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
 
 router.use(verifyToken);
 
@@ -37,6 +56,59 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
     });
   } catch (err) {
     console.error('Error fetching student profile:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/search', searchLimiter, requireRole(['ADMINISTRATOR', 'PRINCIPAL', 'TEACHER']), async (req: AuthRequest, res) => {
+  try {
+    const parsed = studentSearchQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: 'Invalid search parameters',
+        details: parsed.error.issues,
+      });
+    }
+
+    const { fullName, studentId, nicNumber, olYear, alYear, page, pageSize } = parsed.data;
+
+    const where: Prisma.StudentWhereInput = {
+      ...(fullName !== undefined && { fullName: { contains: escapeLikeWildcards(fullName), mode: 'insensitive' } }),
+      ...(studentId !== undefined && { indexNumber: studentId }),
+      ...(nicNumber !== undefined && { nicNumber }),
+      ...(olYear !== undefined && { olYear }),
+      ...(alYear !== undefined && { alYear }),
+    };
+
+    const [students, total] = await prisma.$transaction([
+      prisma.student.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          indexNumber: true,
+          fullName: true,
+          dateOfBirth: true,
+          nicNumber: true,
+          olYear: true,
+          alYear: true,
+        },
+      }),
+      prisma.student.count({ where }),
+    ]);
+
+    return res.status(200).json({
+      students,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    });
+  } catch (err) {
+    console.error('Error searching students:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
