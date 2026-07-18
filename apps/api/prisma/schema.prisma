@@ -37,7 +37,7 @@ model Student {
   indexNumber String     @unique
   dateOfBirth DateTime
   address     String
-  nicNumber   String?
+  nicNumber   String?    @unique
   olYear      Int?
   alYear      Int?
   classes     Class[]
