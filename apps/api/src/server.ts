@@ -84,20 +84,6 @@ app.get('/api/students', async (req, res) => {
   }
 });
 
-app.get('/api/students/search', async (req, res) => {
-  try {
-    const { query } = req.query;
-    const filteredStudents = mockStudents.filter(student =>
-      student.firstName.toLowerCase().includes((query as string).toLowerCase()) ||
-      student.lastName.toLowerCase().includes((query as string).toLowerCase()) ||
-      student.email.toLowerCase().includes((query as string).toLowerCase())
-    );
-    res.json(filteredStudents);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to search students' });
-  }
-});
-
 app.get('/api/students/me', async (req, res) => {
   try {
     // Mock current user - in real app this would come from auth
