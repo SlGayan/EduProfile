@@ -2,15 +2,20 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Search, RotateCcw, Eye } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Search, RotateCcw, Eye, ArrowUpDown, AlertCircle } from "lucide-react"
 import Link from "next/link"
+import { apiFetch } from "@/lib/apiFetch"
+import { getCurrentUser } from "@/lib/auth"
+import { sortStudents, formatDate, type SortField, type SortOrder } from "@/lib/studentSearch"
 
 interface SearchFilters {
   fullName: string
@@ -21,15 +26,58 @@ interface SearchFilters {
 }
 
 interface Student {
-  id: string
-  studentId: string
+  id: number
+  indexNumber: string
   fullName: string
   dateOfBirth: string
   olYear: number | null
   alYear: number | null
 }
 
+interface StudentSearchResponse {
+  students: Student[]
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
+}
+
+async function fetchStudentSearch(queryParams: string): Promise<StudentSearchResponse> {
+  const response = await apiFetch(`/api/students/search?${queryParams}`)
+  if (!response.ok) {
+    let message = "Failed to fetch students"
+    try {
+      const data = await response.json()
+      if (typeof data?.error === "string") {
+        message = data.error
+      }
+    } catch {
+      // no JSON body
+    }
+    throw new Error(message)
+  }
+  const data = await response.json()
+  if (!Array.isArray(data?.students)) {
+    throw new Error("Unexpected response from server")
+  }
+  return data
+}
+
 export default function StudentSearchPage() {
+  const router = useRouter()
+
+  // Role guard — only ADMINISTRATOR, PRINCIPAL, or TEACHER (stored lowercase in auth)
+  const user = getCurrentUser()
+  const isAuthorized = !user || user.role === "admin" || user.role === "principal" || user.role === "teacher"
+
+  useEffect(() => {
+    if (!isAuthorized) {
+      router.replace("/unauthorized")
+    }
+  }, [isAuthorized, router])
+
   const [filters, setFilters] = useState<SearchFilters>({
     fullName: "",
     studentId: "",
@@ -38,6 +86,8 @@ export default function StudentSearchPage() {
     alYear: "",
   })
   const [hasSearched, setHasSearched] = useState(false)
+  const [sortField, setSortField] = useState<SortField>("fullName")
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
 
   // Build query params from filters
   const buildQueryParams = () => {
@@ -51,16 +101,33 @@ export default function StudentSearchPage() {
   }
 
   // Fetch students using TanStack Query
-  const { data: students, isLoading } = useQuery<Student[]>({
+  const {
+    data,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["students", filters],
-    queryFn: async () => {
-      const queryParams = buildQueryParams()
-      const response = await fetch(`/api/students/search?${queryParams}`)
-      if (!response.ok) throw new Error("Failed to fetch students")
-      return response.json()
-    },
-    enabled: hasSearched,
+    queryFn: () => fetchStudentSearch(buildQueryParams()),
+    enabled: isAuthorized && hasSearched,
   })
+  const students = data?.students
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortOrder("asc")
+    }
+  }
+
+  const sortHeaderClassName = (field: SortField) =>
+    `flex items-center gap-1 px-0 hover:bg-transparent ${sortField === field ? "text-foreground font-semibold" : "text-muted-foreground"}`
+
+  const sortIconClassName = (field: SortField) =>
+    `h-4 w-4 transition-transform ${sortField === field && sortOrder === "desc" ? "rotate-180" : ""}`
+
+  const sortedStudents = students ? sortStudents(students, sortField, sortOrder) : undefined
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,6 +147,10 @@ export default function StudentSearchPage() {
 
   const handleInputChange = (field: keyof SearchFilters, value: string) => {
     setFilters((prev) => ({ ...prev, [field]: value }))
+  }
+
+  if (!isAuthorized) {
+    return null
   }
 
   return (
@@ -167,24 +238,58 @@ export default function StudentSearchPage() {
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
             </div>
-          ) : students && students.length > 0 ? (
+          ) : error ? (
+            <div className="p-6">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {error instanceof Error ? error.message : "Failed to search students. Please try again later."}
+                </AlertDescription>
+              </Alert>
+            </div>
+          ) : sortedStudents && sortedStudents.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Student ID</TableHead>
-                  <TableHead>Full Name</TableHead>
-                  <TableHead>Date of Birth</TableHead>
-                  <TableHead>O/L Year</TableHead>
-                  <TableHead>A/L Year</TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort("indexNumber")} className={sortHeaderClassName("indexNumber")}>
+                      Student ID
+                      <ArrowUpDown className={sortIconClassName("indexNumber")} />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort("fullName")} className={sortHeaderClassName("fullName")}>
+                      Full Name
+                      <ArrowUpDown className={sortIconClassName("fullName")} />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort("dateOfBirth")} className={sortHeaderClassName("dateOfBirth")}>
+                      Date of Birth
+                      <ArrowUpDown className={sortIconClassName("dateOfBirth")} />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort("olYear")} className={sortHeaderClassName("olYear")}>
+                      O/L Year
+                      <ArrowUpDown className={sortIconClassName("olYear")} />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort("alYear")} className={sortHeaderClassName("alYear")}>
+                      A/L Year
+                      <ArrowUpDown className={sortIconClassName("alYear")} />
+                    </Button>
+                  </TableHead>
                   <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {students.map((student) => (
+                {sortedStudents.map((student) => (
                   <TableRow key={student.id}>
-                    <TableCell className="font-medium">{student.studentId}</TableCell>
+                    <TableCell className="font-medium">{student.indexNumber}</TableCell>
                     <TableCell>{student.fullName}</TableCell>
-                    <TableCell>{student.dateOfBirth}</TableCell>
+                    <TableCell>{formatDate(student.dateOfBirth)}</TableCell>
                     <TableCell>{student.olYear || "N/A"}</TableCell>
                     <TableCell>{student.alYear || "N/A"}</TableCell>
                     <TableCell>
