@@ -9,6 +9,13 @@ const ROLE_ROUTES: Record<string, string[]> = {
     student: ["/student"],
 }
 
+// Routes shared across multiple roles — checked before ROLE_ROUTES below, since
+// they're more specific than (and would otherwise be shadowed by) a single-role
+// prefix match (e.g. "/admin/search-students" also starts with "/admin").
+const SHARED_ROUTES: { path: string; roles: string[] }[] = [
+    { path: "/admin/search-students", roles: ["admin", "principal", "teacher"] },
+]
+
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl
     const role = request.cookies.get("eduprofile_role")?.value
@@ -33,7 +40,17 @@ export function middleware(request: NextRequest) {
         if (role === "student") return NextResponse.redirect(new URL("/student/profile", request.url))
     }
 
-    // 3. Role-based access control
+    // 3. Shared routes — allow any of the listed roles, checked before the
+    // single-role prefixes below since they'd otherwise shadow this
+    const sharedRoute = SHARED_ROUTES.find(r => pathname.startsWith(r.path))
+    if (sharedRoute) {
+        if (!role || !sharedRoute.roles.includes(role)) {
+            return NextResponse.redirect(new URL("/unauthorized", request.url))
+        }
+        return NextResponse.next()
+    }
+
+    // 4. Role-based access control
     for (const [requiredRole, routes] of Object.entries(ROLE_ROUTES)) {
         if (routes.some(route => pathname.startsWith(route))) {
             if (role !== requiredRole) {

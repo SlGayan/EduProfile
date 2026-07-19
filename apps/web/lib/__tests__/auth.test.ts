@@ -169,6 +169,33 @@ describe("Auth Utilities", () => {
       const user = getCurrentUser()
       expect(user).toBeNull()
     })
+
+    it("should unwrap useAuthStore's Zustand-persisted shape when it holds a real user", () => {
+      const mockUser: MockUser = {
+        id: "1",
+        name: "Test User",
+        email: "test@edu.com",
+        role: "admin",
+        tokenExpiry: Date.now() + 60 * 60 * 1000,
+      }
+
+      // This is the shape zustand/middleware's persist() actually writes to this
+      // same localStorage key — not the plain object this function originally expected.
+      localStorage.setItem("eduprofile_user", JSON.stringify({ state: { user: mockUser }, version: 0 }))
+
+      const user = getCurrentUser()
+      expect(user).toEqual(mockUser)
+    })
+
+    it("should return null (not the wrapper object) for a logged-out Zustand-persisted state", () => {
+      // The exact shape persisted after a real logout: clearUser()/setUser(null) leaves
+      // `{ state: { user: null }, version } ` in localStorage — this must not be mistaken
+      // for a valid (wrapper-shaped) user object.
+      localStorage.setItem("eduprofile_user", JSON.stringify({ state: { user: null }, version: 0 }))
+
+      const user = getCurrentUser()
+      expect(user).toBeNull()
+    })
   })
 
   describe("login (API with fallback)", () => {
