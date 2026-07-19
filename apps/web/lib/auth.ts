@@ -118,7 +118,18 @@ export function getCurrentUser(): User | null {
     const userStr = localStorage.getItem("eduprofile_user")
     if (userStr) {
       try {
-        const user = JSON.parse(userStr) as User
+        const parsed = JSON.parse(userStr)
+        // useAuthStore's Zustand `persist` middleware also writes to this same
+        // localStorage key, as { state: { user }, version }, and (since the login
+        // page calls setUser() right after login()) its write always lands last —
+        // unwrap that shape if present, otherwise assume the plain User object this
+        // function originally expected (still used directly by storeUser()/mockLogin()).
+        // Checked via `"state" in parsed` (not `parsed?.state?.user ?? parsed`) because
+        // a real logout persists { state: { user: null }, version } — with `??`, that
+        // explicit null would fall through to the whole wrapper object instead of null.
+        const isWrapped = parsed !== null && typeof parsed === "object" && "state" in parsed
+        const user = (isWrapped ? parsed.state?.user ?? null : parsed) as User | null
+        if (!user) return null
         // Check if token has expired
         if (isTokenExpired(user)) {
           // Auto-logout if expired
