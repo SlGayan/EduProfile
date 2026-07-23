@@ -104,43 +104,44 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
       }
     }
     
-    // Upsert subjects
-    const subjectMap = new Map<string, number>();
-    for (const subName of uniqueSubjectNames) {
-      let subject = await prisma.subject.findFirst({ where: { name: subName } });
-      if (!subject) {
-        subject = await prisma.subject.create({ data: { name: subName } });
+    await prisma.$transaction(async (tx) => {
+      // Upsert subjects inside the transaction so a brand-new subject name
+      // can never be left committed if the import fails partway through.
+      const subjectMap = new Map<string, number>();
+      for (const subName of uniqueSubjectNames) {
+        const subject = await tx.subject.upsert({
+          where: { name: subName },
+          update: {},
+          create: { name: subName },
+        });
+        subjectMap.set(subName, subject.id);
       }
-      subjectMap.set(subName, subject.id);
-    }
-    
-    // Prepare transaction
-    const upsertPromises = parsedRows.map(row => {
-      const student = studentMap.get(row.studentIndexNumber)!;
-      const subjectId = subjectMap.get(row.subjectName)!;
-      
-      return prisma.termMark.upsert({
-        where: {
-          studentId_subjectId_term_year: {
+
+      for (const row of parsedRows) {
+        const student = studentMap.get(row.studentIndexNumber)!;
+        const subjectId = subjectMap.get(row.subjectName)!;
+
+        await tx.termMark.upsert({
+          where: {
+            studentId_subjectId_term_year: {
+              studentId: student.id,
+              subjectId: subjectId,
+              term: row.term,
+              year: row.year
+            }
+          },
+          update: { marks: row.marks },
+          create: {
             studentId: student.id,
             subjectId: subjectId,
             term: row.term,
-            year: row.year
+            year: row.year,
+            marks: row.marks
           }
-        },
-        update: { marks: row.marks },
-        create: {
-          studentId: student.id,
-          subjectId: subjectId,
-          term: row.term,
-          year: row.year,
-          marks: row.marks
-        }
-      });
+        });
+      }
     });
-    
-    await prisma.$transaction(upsertPromises);
-    
+
     return res.status(200).json({ message: `Successfully imported ${parsedRows.length} mark(s)` });
 
   } catch (err: any) {
