@@ -68,7 +68,7 @@ model Class {
 
 model Subject {
   id        Int        @id @default(autoincrement())
-  name      String
+  name      String     @unique
   termMarks TermMark[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
