@@ -4,6 +4,7 @@ import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import classesRouter from './routes/classes.js';
 import studentsRouter from './routes/students.js';
+import teachersRouter from './routes/teachers.js';
 import marksRouter from './modules/marks/marks.routes.js';
 
 dotenv.config();
@@ -30,6 +31,9 @@ app.use('/api/classes', classesRouter);
 
 // Student management routes (bulk import)
 app.use('/api/students', studentsRouter);
+
+// Teacher listing routes
+app.use('/api/teachers', teachersRouter);
 
 // Marks management routes (bulk import)
 app.use('/api/marks', marksRouter);
@@ -66,15 +70,6 @@ const mockStudents = [
   }
 ];
 
-const mockTeachers = [
-  {
-    id: 1,
-    name: 'John Doe',
-    email: 'teacher@edu.com',
-    classes: [{ id: 1, name: 'Grade 10-A' }]
-  }
-];
-
 // Students routes
 app.get('/api/students', async (req, res) => {
   try {
@@ -94,15 +89,6 @@ app.get('/api/students/me', async (req, res) => {
     res.json(student);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch student profile' });
-  }
-});
-
-// Teachers routes
-app.get('/api/teachers', async (req, res) => {
-  try {
-    res.json(mockTeachers);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch teachers' });
   }
 });
 
