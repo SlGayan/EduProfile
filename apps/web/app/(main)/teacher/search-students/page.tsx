@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { redirect } from "next/navigation"
+import { StudentSearch } from "@/components/student-search"
 
 export const metadata: Metadata = {
   title: "Search Students | EduProfile",
@@ -7,6 +7,5 @@ export const metadata: Metadata = {
 }
 
 export default function TeacherSearchStudentsPage() {
-  // Redirect to admin search students page (same functionality)
-  redirect("/admin/search-students")
+  return <StudentSearch />
 }
