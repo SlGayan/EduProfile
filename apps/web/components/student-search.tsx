@@ -11,8 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Search, RotateCcw, Eye, ArrowUpDown, AlertCircle } from "lucide-react"
-import Link from "next/link"
+import { Search, RotateCcw, ArrowUpDown, AlertCircle } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { getCurrentUser } from "@/lib/auth"
 import { sortStudents, formatDate, type SortField, type SortOrder } from "@/lib/studentSearch"
@@ -282,7 +281,6 @@ export function StudentSearch() {
                       <ArrowUpDown className={sortIconClassName("alYear")} />
                     </Button>
                   </TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -293,14 +291,6 @@ export function StudentSearch() {
                     <TableCell>{formatDate(student.dateOfBirth)}</TableCell>
                     <TableCell>{student.olYear ?? "N/A"}</TableCell>
                     <TableCell>{student.alYear ?? "N/A"}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/admin/students/${student.id}`}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Profile
-                        </Link>
-                      </Button>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
