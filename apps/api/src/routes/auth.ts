@@ -67,10 +67,10 @@ router.post('/login', limiter, async (req, res) => {
 const registerSchema = z.object({
   email: z.string().email().endsWith("@edu.com", "Registration is restricted to @edu.com emails"),
   password: z.string().min(6),
-  role: z.enum(['STUDENT', 'TEACHER', 'PRINCIPAL', 'ADMINISTRATOR']),
+  role: z.literal('STUDENT').optional().default('STUDENT'),
 });
 
-router.post('/register', async (req, res) => {
+router.post('/register', limiter, async (req, res) => {
   try {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
