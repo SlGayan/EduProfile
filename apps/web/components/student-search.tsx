@@ -78,25 +78,30 @@ export function StudentSearch() {
     }
   }, [isAuthorized, router])
 
-  const [filters, setFilters] = useState<SearchFilters>({
+  const emptyFilters: SearchFilters = {
     fullName: "",
     studentId: "",
     nicNumber: "",
     olYear: "",
     alYear: "",
-  })
+  }
+
+  const [filters, setFilters] = useState<SearchFilters>(emptyFilters)
+  // Filters actually submitted via Search — the query only reacts to this,
+  // so editing the form mid-result-set doesn't silently re-fetch on every keystroke.
+  const [submittedFilters, setSubmittedFilters] = useState<SearchFilters>(emptyFilters)
   const [hasSearched, setHasSearched] = useState(false)
   const [sortField, setSortField] = useState<SortField>("fullName")
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
 
-  // Build query params from filters
-  const buildQueryParams = () => {
+  // Build query params from the submitted (not live) filters
+  const buildQueryParams = (f: SearchFilters) => {
     const params = new URLSearchParams()
-    if (filters.fullName) params.append("fullName", filters.fullName)
-    if (filters.studentId) params.append("studentId", filters.studentId)
-    if (filters.nicNumber) params.append("nicNumber", filters.nicNumber)
-    if (filters.olYear) params.append("olYear", filters.olYear)
-    if (filters.alYear) params.append("alYear", filters.alYear)
+    if (f.fullName) params.append("fullName", f.fullName)
+    if (f.studentId) params.append("studentId", f.studentId)
+    if (f.nicNumber) params.append("nicNumber", f.nicNumber)
+    if (f.olYear) params.append("olYear", f.olYear)
+    if (f.alYear) params.append("alYear", f.alYear)
     return params.toString()
   }
 
@@ -106,8 +111,8 @@ export function StudentSearch() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["students", filters],
-    queryFn: () => fetchStudentSearch(buildQueryParams()),
+    queryKey: ["students", submittedFilters],
+    queryFn: () => fetchStudentSearch(buildQueryParams(submittedFilters)),
     enabled: isAuthorized && hasSearched,
   })
   const students = data?.students
@@ -131,17 +136,13 @@ export function StudentSearch() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmittedFilters(filters)
     setHasSearched(true)
   }
 
   const handleReset = () => {
-    setFilters({
-      fullName: "",
-      studentId: "",
-      nicNumber: "",
-      olYear: "",
-      alYear: "",
-    })
+    setFilters(emptyFilters)
+    setSubmittedFilters(emptyFilters)
     setHasSearched(false)
   }
 
@@ -290,8 +291,8 @@ export function StudentSearch() {
                     <TableCell className="font-medium">{student.indexNumber}</TableCell>
                     <TableCell>{student.fullName}</TableCell>
                     <TableCell>{formatDate(student.dateOfBirth)}</TableCell>
-                    <TableCell>{student.olYear || "N/A"}</TableCell>
-                    <TableCell>{student.alYear || "N/A"}</TableCell>
+                    <TableCell>{student.olYear ?? "N/A"}</TableCell>
+                    <TableCell>{student.alYear ?? "N/A"}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" asChild>
                         <Link href={`/admin/students/${student.id}`}>

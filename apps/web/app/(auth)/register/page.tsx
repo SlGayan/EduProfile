@@ -10,7 +10,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -22,7 +21,6 @@ const registerSchema = z.object({
     .min(6, "Password must be at least 6 characters.")
     .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password must contain at least one letter and one number."),
   confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters."),
-  role: z.enum(["STUDENT", "TEACHER", "PRINCIPAL", "ADMINISTRATOR"], { required_error: "Please select a role." }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
@@ -37,8 +35,6 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterDefaults>({
     resolver: zodResolver(registerSchema),
@@ -46,7 +42,6 @@ export default function RegisterPage() {
       email: "",
       password: "",
       confirmPassword: "",
-      role: "STUDENT",
     },
   })
 
@@ -58,7 +53,7 @@ export default function RegisterPage() {
       const response = await fetch(`/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: data.email, password: data.password, role: data.role }),
+        body: JSON.stringify({ email: data.email, password: data.password }),
       })
 
       const result = await response.json()
@@ -152,26 +147,6 @@ export default function RegisterPage() {
             {errors.confirmPassword && (
               <p id="confirmPassword-error" role="alert" className="text-sm text-destructive">
                 {errors.confirmPassword.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="role">Role</Label>
-            <Select onValueChange={(value) => setValue("role", value as "STUDENT" | "TEACHER" | "PRINCIPAL" | "ADMINISTRATOR")} defaultValue="STUDENT">
-              <SelectTrigger>
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="STUDENT">Student</SelectItem>
-                <SelectItem value="TEACHER">Teacher</SelectItem>
-                <SelectItem value="PRINCIPAL">Principal</SelectItem>
-                <SelectItem value="ADMINISTRATOR">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-            {errors.role && (
-              <p id="role-error" role="alert" className="text-sm text-destructive">
-                {errors.role.message}
               </p>
             )}
           </div>
