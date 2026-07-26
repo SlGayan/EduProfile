@@ -38,7 +38,7 @@ router.post('/', async (req: AuthRequest, res) => {
         const { name, year, teacherId } = parsed.data;
 
         if (teacherId) {
-            const teacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
+            const teacher = await prisma.teacher.findUnique({ where: { id: teacherId, user: { deletedAt: null } } });
             if (!teacher) return res.status(404).json({ error: 'Teacher not found' });
         }
 
@@ -96,7 +96,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
         if (!existing) return res.status(404).json({ error: 'Class not found' });
 
         if (teacherId) {
-            const teacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
+            const teacher = await prisma.teacher.findUnique({ where: { id: teacherId, user: { deletedAt: null } } });
             if (!teacher) return res.status(404).json({ error: 'Teacher not found' });
         }
 
@@ -143,7 +143,7 @@ router.post('/:id/teacher', async (req: AuthRequest, res) => {
 
         const { teacherId } = parsed.data;
 
-        const teacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
+        const teacher = await prisma.teacher.findUnique({ where: { id: teacherId, user: { deletedAt: null } } });
         if (!teacher) return res.status(404).json({ error: 'Teacher not found' });
 
         const existing = await prisma.class.findUnique({ where: { id } });
@@ -171,7 +171,7 @@ router.post('/:id/students', async (req: AuthRequest, res) => {
 
         const { studentId } = parsed.data;
 
-        const student = await prisma.student.findUnique({ where: { id: studentId } });
+        const student = await prisma.student.findUnique({ where: { id: studentId, user: { deletedAt: null } } });
         if (!student) return res.status(404).json({ error: 'Student not found' });
 
         const existing = await prisma.class.findUnique({ where: { id } });

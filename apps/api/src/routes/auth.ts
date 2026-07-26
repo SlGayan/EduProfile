@@ -34,7 +34,7 @@ router.post('/login', limiter, async (req, res) => {
     // normalize email for lookup
     email = email.trim().toLowerCase();
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email, deletedAt: null } });
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }

@@ -34,7 +34,7 @@ router.use(verifyToken);
 router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
   try {
     const student = await prisma.student.findUnique({
-      where: { userId: req.user!.id },
+      where: { userId: req.user!.id, user: { deletedAt: null } },
       include: { user: true, classes: true },
     });
 
@@ -73,6 +73,7 @@ router.get('/search', searchLimiter, requireRole(['ADMINISTRATOR', 'PRINCIPAL', 
     const { fullName, studentId, nicNumber, olYear, alYear, page, pageSize } = parsed.data;
 
     const where: Prisma.StudentWhereInput = {
+      user: { deletedAt: null },
       ...(fullName !== undefined && { fullName: { contains: escapeLikeWildcards(fullName), mode: 'insensitive' } }),
       ...(studentId !== undefined && { indexNumber: studentId }),
       ...(nicNumber !== undefined && { nicNumber }),
