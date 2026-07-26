@@ -64,7 +64,7 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
     
     // Look up Teacher to ensure they exist and get their classes
     const teacher = await prisma.teacher.findUnique({
-      where: { userId: teacherUserId },
+      where: { userId: teacherUserId, user: { deletedAt: null } },
       include: { classes: true }
     });
     
@@ -83,7 +83,7 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
     
     // Fetch students
     const students = await prisma.student.findMany({
-      where: { indexNumber: { in: uniqueIndexNumbers } },
+      where: { indexNumber: { in: uniqueIndexNumbers }, user: { deletedAt: null } },
       include: { classes: true }
     });
     
@@ -157,7 +157,7 @@ export const getMyMarks = async (req: AuthRequest, res: Response) => {
     }
 
     const student = await prisma.student.findUnique({
-      where: { userId: req.user.id },
+      where: { userId: req.user.id, user: { deletedAt: null } },
     });
 
     if (!student) {
@@ -220,7 +220,7 @@ export const getClassMarks = async (req: AuthRequest, res: Response) => {
     }
 
     const teacher = await prisma.teacher.findUnique({
-      where: { userId: req.user.id },
+      where: { userId: req.user.id, user: { deletedAt: null } },
       include: { classes: true },
     });
 
