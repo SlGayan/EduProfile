@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import { verifyToken, type AuthRequest } from '../middleware/authMiddleware.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -57,7 +58,10 @@ router.post('/login', limiter, async (req, res) => {
     const signOptions = { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } as unknown as SignOptions;
     const token = jwt.sign({ id: user.id, role: normalizedRole }, secret as Secret, signOptions);
 
-    return res.status(200).json({ token, user: { id: user.id, email: user.email, role: normalizedRole } });
+    return res.status(200).json({
+      token,
+      user: { id: user.id, email: user.email, role: normalizedRole, mustChangePassword: user.mustChangePassword },
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -102,6 +106,35 @@ router.post('/register', limiter, async (req, res) => {
     const normalizedRole = rawRole === 'ADMINISTRATOR' ? 'admin' : rawRole.toLowerCase();
 
     return res.status(201).json({ user: { id: user.id, email: user.email, role: normalizedRole } });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+const changePasswordSchema = z.object({
+  newPassword: z
+    .string()
+    .min(6)
+    .regex(/^(?=.*[A-Za-z])(?=.*\d)/, 'Password must contain at least one letter and one number'),
+});
+
+router.post('/change-password', verifyToken, async (req: AuthRequest, res) => {
+  try {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+    }
+
+    const { newPassword } = parsed.data;
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { password: hashedPassword, mustChangePassword: false },
+    });
+
+    return res.status(200).json({ message: 'Password updated successfully' });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Internal server error' });

@@ -20,6 +20,7 @@ export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl
     const role = request.cookies.get("eduprofile_role")?.value
     const userCookie = request.cookies.get("eduprofile_user")?.value
+    const mustChangePassword = request.cookies.get("eduprofile_must_change_password")?.value === "true"
 
     // 1. If trying to access a protected route and no user/role, redirect to login
     const isProtectedRoute = Object.values(ROLE_ROUTES).some(routes =>
@@ -30,6 +31,11 @@ export function middleware(request: NextRequest) {
         const url = new URL("/login", request.url)
         url.searchParams.set("callbackUrl", pathname)
         return NextResponse.redirect(url)
+    }
+
+    // 1b. A flagged account must set a new password before reaching any other page
+    if (mustChangePassword && role && pathname !== "/set-new-password") {
+        return NextResponse.redirect(new URL("/set-new-password", request.url))
     }
 
     // 2. If logged in and trying to access /login or /register, redirect to their dashboard
