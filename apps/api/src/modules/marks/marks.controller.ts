@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { AuthRequest } from '../../middleware/auth.js';
+import { AuthRequest } from '../../middleware/authMiddleware.js';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import csvParser from 'csv-parser';
