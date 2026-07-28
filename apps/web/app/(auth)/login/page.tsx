@@ -49,6 +49,11 @@ export default function LoginPage() {
       setUser(user)
       toast({ title: "Signed in", description: `Welcome back, ${user.name}` })
 
+      if (user.mustChangePassword) {
+        router.push("/set-new-password")
+        return
+      }
+
       // role-based routing
       if (user.role === "teacher") router.push("/teacher/dashboard")
       else if (user.role === "principal") router.push("/principal/dashboard")

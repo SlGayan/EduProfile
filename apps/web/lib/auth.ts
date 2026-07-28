@@ -37,11 +37,13 @@ function storeUser(user: User | null) {
       // Set cookies for middleware
       document.cookie = `eduprofile_role=${user.role}; path=/; max-age=${30 * 24 * 60 * 60}`
       document.cookie = `eduprofile_user=${JSON.stringify(user)}; path=/; max-age=${30 * 24 * 60 * 60}`
+      document.cookie = `eduprofile_must_change_password=${!!user.mustChangePassword}; path=/; max-age=${30 * 24 * 60 * 60}`
     } else {
       localStorage.removeItem("eduprofile_user")
       // Remove cookies
       document.cookie = "eduprofile_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
       document.cookie = "eduprofile_user=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      document.cookie = "eduprofile_must_change_password=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
     }
   }
 }
@@ -78,6 +80,7 @@ export async function login(email: string, password: string): Promise<User> {
       ...data.user,
       token: data.token,
       tokenExpiry: data.tokenExpiry || Date.now() + 24 * 60 * 60 * 1000, // Default 24h expiry
+      mustChangePassword: data.user.mustChangePassword,
     }
     storeUser(user)
     return user

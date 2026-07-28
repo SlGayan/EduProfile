@@ -27,4 +27,5 @@ export interface User {
   role: "admin" | "principal" | "teacher" | "student"
   tokenExpiry?: number // Unix timestamp in milliseconds
   token?: string // JWT for API calls
+  mustChangePassword?: boolean
 }

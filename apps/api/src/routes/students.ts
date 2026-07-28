@@ -206,6 +206,7 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
                 email: data.email.trim().toLowerCase(),
                 password: hashedPassword,
                 role: 'STUDENT',
+                mustChangePassword: true,
               },
             });
 
