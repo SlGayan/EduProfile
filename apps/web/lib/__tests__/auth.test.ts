@@ -275,6 +275,31 @@ describe("Auth Utilities", () => {
       expect(user.email).toBe("api@edu.com")
     })
 
+    it("should use the backend-provided tokenExpiry verbatim, not the 24h default", async () => {
+      const realTokenExpiry = Date.now() + 15 * 60 * 1000 // 15 minutes, matching the real JWT lifetime
+      const mockResponse = {
+        token: "signed.jwt.token",
+        tokenExpiry: realTokenExpiry,
+        user: {
+          id: "1",
+          name: "API User",
+          email: "api@edu.com",
+          role: "teacher",
+        },
+      }
+
+      ;(global.fetch as Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      })
+
+      const user = await login("api@edu.com", "password123")
+
+      expect(user.tokenExpiry).toBe(realTokenExpiry)
+      // Sanity check it's nowhere near the old hardcoded 24h fallback
+      expect(user.tokenExpiry!).toBeLessThan(Date.now() + 60 * 60 * 1000)
+    })
+
     it("should add default tokenExpiry if not provided by API", async () => {
       const mockResponse = {
         user: {

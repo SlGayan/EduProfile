@@ -1,7 +1,6 @@
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
 import type { User } from "./types"
-import { isTokenExpired, mockLogout } from "./auth"
+import { isTokenExpired, mockLogout, getCurrentUser, storeUser } from "./auth"
 
 interface AuthState {
   user: User | null
@@ -10,44 +9,35 @@ interface AuthState {
   clearUser: () => void
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      isAuthenticated: false,
+// storeUser() (in ./auth) is the single function that writes auth state to
+// localStorage/cookies. This store never writes storage directly — it seeds
+// its initial state from storeUser()'s last write (via getCurrentUser()) and
+// calls storeUser()/mockLogout() on every change, so there is exactly one
+// writer instead of this store's old `persist` middleware racing storeUser()
+// for the same localStorage key.
+const initialUser = typeof window !== "undefined" ? getCurrentUser() : null
 
-      setUser: (u: User | null) => {
-        // Guard against expired tokens being set
-        if (u && isTokenExpired(u)) {
-          set(() => ({ user: null, isAuthenticated: false }))
-          return
-        }
-        set(() => ({ user: u, isAuthenticated: u !== null }))
-      },
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: initialUser,
+  isAuthenticated: initialUser !== null,
 
-      clearUser: () => {
-        try {
-          mockLogout()
-        } catch (error) {
-          console.warn("Failed to clear auth data:", error)
-        }
-        set(() => ({ user: null, isAuthenticated: false }))
-      },
-    }),
-    {
-      name: "eduprofile_user", // localStorage key — keeps backward compat
-      // Only persist user; isAuthenticated is derived on rehydration
-      partialize: (state) => ({ user: state.user }),
-      // On rehydration, re-derive isAuthenticated and evict expired tokens
-      onRehydrateStorage: () => (state) => {
-        if (!state) return
-        if (state.user && isTokenExpired(state.user)) {
-          state.user = null
-          state.isAuthenticated = false
-        } else {
-          state.isAuthenticated = state.user !== null
-        }
-      },
+  setUser: (u: User | null) => {
+    // Guard against expired tokens being set
+    if (u && isTokenExpired(u)) {
+      storeUser(null)
+      set(() => ({ user: null, isAuthenticated: false }))
+      return
     }
-  )
-)
+    storeUser(u)
+    set(() => ({ user: u, isAuthenticated: u !== null }))
+  },
+
+  clearUser: () => {
+    try {
+      mockLogout()
+    } catch (error) {
+      console.warn("Failed to clear auth data:", error)
+    }
+    set(() => ({ user: null, isAuthenticated: false }))
+  },
+}))

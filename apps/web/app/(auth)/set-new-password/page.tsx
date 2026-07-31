@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
-import { getCurrentUser, storeUser } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
 import { useAuthStore } from "@/lib/useAuthStore"
 import { apiFetch } from "@/lib/apiFetch"
 
@@ -66,7 +66,7 @@ export default function SetNewPasswordPage() {
       const updated = current ? { ...current, mustChangePassword: false } : current
 
       if (updated) {
-        storeUser(updated)
+        // setUser() persists via storeUser() internally — no separate storeUser() call needed
         setUser(updated)
       }
 
