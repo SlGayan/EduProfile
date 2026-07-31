@@ -58,8 +58,19 @@ router.post('/login', limiter, async (req, res) => {
     const signOptions = { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } as unknown as SignOptions;
     const token = jwt.sign({ id: user.id, role: normalizedRole }, secret as Secret, signOptions);
 
+    // Read the expiry back off the token we just signed (its `exp` claim, in
+    // seconds since epoch) rather than parsing the JWT_EXPIRES_IN string — this
+    // stays accurate regardless of what that env var is set to.
+    const decoded = jwt.decode(token);
+    if (!decoded || typeof decoded === 'string' || typeof decoded.exp !== 'number') {
+      console.error('Failed to decode freshly-signed JWT');
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    const tokenExpiry = decoded.exp * 1000;
+
     return res.status(200).json({
       token,
+      tokenExpiry,
       user: { id: user.id, email: user.email, role: normalizedRole, mustChangePassword: user.mustChangePassword },
     });
   } catch (err) {

@@ -12,20 +12,22 @@ import {
 import { Button } from "@/components/ui/button"
 import { Menu } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { getCurrentUser, mockLogout } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
+import { useAuthStore } from "@/lib/useAuthStore"
 import { useEffect, useState } from "react"
 import type { MockUser } from "@/lib/auth"
 
 export function AppHeader() {
   const [user, setUser] = useState<MockUser | null>(null)
   const router = useRouter()
+  const clearUser = useAuthStore((s) => s.clearUser)
 
   useEffect(() => {
     setUser(getCurrentUser())
   }, [])
 
   const handleLogout = () => {
-    mockLogout()
+    clearUser()
     router.push("/login")
   }
 

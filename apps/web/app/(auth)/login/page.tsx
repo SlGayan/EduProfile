@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 import { login } from "@/lib/auth"
 import { useAuthStore } from "@/lib/useAuthStore"
+import { SESSION_EXPIRED_FLAG } from "@/lib/apiFetch"
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email format").endsWith("@edu.com", "Invalid email format"),
@@ -29,6 +30,15 @@ export default function LoginPage() {
   const router = useRouter()
   const setUser = useAuthStore((s) => s.setUser)
   const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (sessionStorage.getItem(SESSION_EXPIRED_FLAG)) {
+      sessionStorage.removeItem(SESSION_EXPIRED_FLAG)
+      toast({ title: "Session expired", description: "Please log in again." })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const {
     register,

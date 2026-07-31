@@ -122,14 +122,15 @@ export function getCurrentUser(): User | null {
     if (userStr) {
       try {
         const parsed = JSON.parse(userStr)
-        // useAuthStore's Zustand `persist` middleware also writes to this same
-        // localStorage key, as { state: { user }, version }, and (since the login
-        // page calls setUser() right after login()) its write always lands last —
-        // unwrap that shape if present, otherwise assume the plain User object this
-        // function originally expected (still used directly by storeUser()/mockLogin()).
+        // Historical defensive branch: useAuthStore's Zustand `persist` middleware
+        // used to also write to this same localStorage key, as { state: { user }, version }.
+        // That middleware has been removed (storeUser() is now the sole writer, which
+        // always writes the plain shape below), but a browser that logged in before this
+        // fix may still have that wrapped shape sitting in localStorage — unwrap it if
+        // present, otherwise assume the plain User object storeUser() writes.
         // Checked via `"state" in parsed` (not `parsed?.state?.user ?? parsed`) because
-        // a real logout persists { state: { user: null }, version } — with `??`, that
-        // explicit null would fall through to the whole wrapper object instead of null.
+        // a wrapped logout would have persisted { state: { user: null }, version } — with
+        // `??`, that explicit null would fall through to the whole wrapper object instead of null.
         const isWrapped = parsed !== null && typeof parsed === "object" && "state" in parsed
         const user = (isWrapped ? parsed.state?.user ?? null : parsed) as User | null
         if (!user) return null

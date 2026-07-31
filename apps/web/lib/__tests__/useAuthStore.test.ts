@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { useAuthStore } from "../useAuthStore"
+import { getCurrentUser } from "../auth"
 import type { User as MockUser } from "../types"
 
 // Mock console.warn to suppress expected warnings
@@ -23,7 +24,7 @@ describe("useAuthStore", () => {
       expect(state.isAuthenticated).toBe(false)
     })
 
-    it("should load user from localStorage if present", () => {
+    it("should seed the store's initial user from localStorage at module load", async () => {
       const mockUser: MockUser = {
         id: "1",
         name: "Test User",
@@ -31,18 +32,18 @@ describe("useAuthStore", () => {
         role: "teacher",
         tokenExpiry: Date.now() + 24 * 60 * 60 * 1000,
       }
-      // Persist middleware stores state under { state: {...}, version: 0 }
-      localStorage.setItem(
-        "eduprofile_user",
-        JSON.stringify({ state: { user: mockUser }, version: 0 })
-      )
+      localStorage.setItem("eduprofile_user", JSON.stringify(mockUser))
 
-      // Re-initialize store by calling the initializer
-      const { user } = useAuthStore.getState()
+      // The store's initial `user` is seeded once, at module-evaluation time, via
+      // getCurrentUser(). vi.resetModules() + a dynamic re-import forces a fresh
+      // evaluation (after localStorage is seeded above) so this test actually
+      // exercises that seeding logic on the store, not just getCurrentUser() in isolation.
+      vi.resetModules()
+      const { useAuthStore: freshStore } = await import("../useAuthStore")
 
-      // Note: In a real scenario, the store would be re-created
-      // For this test, we're verifying the getCurrentUser logic
-      expect(user).toBeDefined()
+      const state = freshStore.getState()
+      expect(state.user).toEqual(mockUser)
+      expect(state.isAuthenticated).toBe(true)
     })
   })
 
@@ -62,7 +63,7 @@ describe("useAuthStore", () => {
       expect(state.isAuthenticated).toBe(true)
     })
 
-    it("should persist user to localStorage via persist middleware", () => {
+    it("should persist user to localStorage via storeUser() (flat shape, single writer)", () => {
       const mockUser: MockUser = {
         id: "2",
         name: "Admin User",
@@ -75,8 +76,8 @@ describe("useAuthStore", () => {
       const stored = localStorage.getItem("eduprofile_user")
       expect(stored).toBeDefined()
       const parsed = JSON.parse(stored!)
-      // persist middleware wraps state
-      expect(parsed.state.user).toEqual(mockUser)
+      // storeUser() writes the flat User object directly — no Zustand wrapper shape
+      expect(parsed).toEqual(mockUser)
     })
 
     it("should not set an expired user", () => {
@@ -131,7 +132,7 @@ describe("useAuthStore", () => {
       expect(state.isAuthenticated).toBe(false)
     })
 
-    it("should remove user from localStorage via persist middleware", () => {
+    it("should remove user from localStorage via storeUser(null)", () => {
       const mockUser: MockUser = {
         id: "1",
         name: "Test User",
@@ -141,17 +142,11 @@ describe("useAuthStore", () => {
 
       useAuthStore.getState().setUser(mockUser)
 
-      // After clearUser the persisted state should have user: null
+      // clearUser() calls mockLogout() -> storeUser(null), which removes the key entirely
       useAuthStore.getState().clearUser()
 
       const stored = localStorage.getItem("eduprofile_user")
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        expect(parsed.state.user).toBeNull()
-      } else {
-        // Acceptable: key removed entirely
-        expect(stored).toBeNull()
-      }
+      expect(stored).toBeNull()
     })
   })
 
