@@ -43,6 +43,7 @@ model Student {
   alYear      Int?
   classes     Class[]
   termMarks   TermMark[]
+  activities  ExtracurricularActivity[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
@@ -90,4 +91,20 @@ model TermMark {
   @@unique([studentId, subjectId, term, year])
   @@index([studentId])
   @@index([subjectId])
+}
+
+model ExtracurricularActivity {
+  id           Int       @id @default(autoincrement())
+  studentId    Int
+  student      Student   @relation(fields: [studentId], references: [id])
+  activityName String
+  activityType String
+  description  String?
+  startDate    DateTime
+  endDate      DateTime?
+  achievements String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([studentId])
 }
