@@ -10,6 +10,10 @@ import {
   studentImportRowSchema,
   studentSearchQuerySchema,
 } from '../validators/studentValidators.js';
+import {
+  listActivities,
+  createActivity,
+} from '../modules/activities/activities.controller.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -247,5 +251,26 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Extracurricular activities (Story 8.2)
+//
+// ROUTE ORDER MATTERS. These are the first `:id` routes on this router, and
+// they must stay BELOW the literal-path routes above (`/me`, `/search`) so a
+// literal segment is never captured as an id.
+//
+// Story 8.4 adds `GET /me/activities` for role STUDENT. It MUST be registered
+// ABOVE these two, or the request matches `/:id/activities` first and is
+// rejected by the role guard below with `403 Insufficient permissions` — the
+// STUDENT caller never reaches the handler, so the failure looks like an auth
+// problem rather than a routing one.
+//
+// `verifyToken` is already applied router-wide above, so only the role guard is
+// added per route.
+// ---------------------------------------------------------------------------
+
+router.get('/:id/activities', requireRole(['TEACHER', 'ADMINISTRATOR']), listActivities);
+
+router.post('/:id/activities', requireRole(['TEACHER', 'ADMINISTRATOR']), createActivity);
 
 export default router;
