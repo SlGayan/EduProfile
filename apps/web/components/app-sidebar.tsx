@@ -53,6 +53,7 @@ const studentNavItems = [
   { href: "/student/profile", label: "My Profile", icon: User },
   { href: "/student/marks", label: "My Marks", icon: Award },
   { href: "/student/activities", label: "My Activities", icon: Trophy },
+  { href: "/student/materials", label: "Study Materials", icon: FileText },
 ]
 
 export function AppSidebar({
