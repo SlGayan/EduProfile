@@ -13,6 +13,7 @@ import {
 import {
   listActivities,
   createActivity,
+  listMyActivities,
 } from '../modules/activities/activities.controller.js';
 
 const prisma = new PrismaClient();
@@ -63,6 +64,16 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// Story 8.4 — the caller's own activities.
+//
+// DELIBERATELY REGISTERED HERE, directly beside `/me` and far above the
+// `/:id/activities` routes at the bottom of this file. Registered below them,
+// this path matches `/:id/activities` with id="me" and is rejected by that
+// route's TEACHER/ADMINISTRATOR guard with `403 Insufficient permissions` —
+// the STUDENT caller never reaches the handler, and the failure reads as an
+// auth problem rather than a routing one. Do not move it.
+router.get('/me/activities', requireRole(['STUDENT']), listMyActivities);
 
 router.get('/search', searchLimiter, requireRole(['ADMINISTRATOR', 'PRINCIPAL', 'TEACHER']), async (req: AuthRequest, res) => {
   try {
@@ -259,11 +270,10 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
 // they must stay BELOW the literal-path routes above (`/me`, `/search`) so a
 // literal segment is never captured as an id.
 //
-// Story 8.4 adds `GET /me/activities` for role STUDENT. It MUST be registered
-// ABOVE these two, or the request matches `/:id/activities` first and is
-// rejected by the role guard below with `403 Insufficient permissions` — the
-// STUDENT caller never reaches the handler, so the failure looks like an auth
-// problem rather than a routing one.
+// Story 8.4's `GET /me/activities` (role STUDENT) is registered ABOVE these,
+// beside the other `/me` route — it must stay there. Below this point it would
+// match `/:id/activities` with id="me" and be rejected by the role guard with
+// `403 Insufficient permissions`, never reaching its handler.
 //
 // `verifyToken` is already applied router-wide above, so only the role guard is
 // added per route.
