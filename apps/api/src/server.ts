@@ -8,6 +8,7 @@ import teachersRouter from './routes/teachers.js';
 import marksRouter from './modules/marks/marks.routes.js';
 import activitiesRouter from './modules/activities/activities.routes.js';
 import materialsRouter from './modules/materials/materials.routes.js';
+import subjectsRouter from './modules/subjects/subjects.routes.js';
 
 dotenv.config();
 
@@ -46,6 +47,9 @@ app.use('/api/activities', activitiesRouter);
 
 // Study material upload/assignment routes
 app.use('/api/materials', materialsRouter);
+
+// Subject listing routes
+app.use('/api/subjects', subjectsRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [

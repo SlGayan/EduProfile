@@ -7,6 +7,24 @@ const router = Router();
 
 router.use(verifyToken);
 
+router.get('/me/classes', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
+  try {
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      include: { classes: true },
+    });
+
+    if (!teacher) {
+      return res.status(403).json({ error: 'Teacher profile not found' });
+    }
+
+    return res.status(200).json(teacher.classes.map((c) => ({ id: String(c.id), name: c.name })));
+  } catch (err) {
+    console.error('Error fetching teacher classes:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/', requireRole(['ADMINISTRATOR', 'PRINCIPAL']), async (req: AuthRequest, res) => {
   try {
     const teachers = await prisma.teacher.findMany({

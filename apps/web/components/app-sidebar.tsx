@@ -30,6 +30,7 @@ const teacherNavItems = [
   { href: "/teacher/import-marks", label: "Import Marks", icon: FileSpreadsheet },
   { href: "/teacher/search-students", label: "Search Students", icon: Search },
   { href: "/teacher/class-marks", label: "Class Marks", icon: BarChart3 },
+  { href: "/teacher/materials", label: "Study Materials", icon: FileText },
 ]
 
 const principalNavItems = [
