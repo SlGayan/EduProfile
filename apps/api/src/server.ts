@@ -7,6 +7,7 @@ import studentsRouter from './routes/students.js';
 import teachersRouter from './routes/teachers.js';
 import marksRouter from './modules/marks/marks.routes.js';
 import activitiesRouter from './modules/activities/activities.routes.js';
+import materialsRouter from './modules/materials/materials.routes.js';
 
 dotenv.config();
 
@@ -42,6 +43,9 @@ app.use('/api/marks', marksRouter);
 // Extracurricular activity routes (update/delete by activity id).
 // The student-scoped list/create routes are served by studentsRouter above.
 app.use('/api/activities', activitiesRouter);
+
+// Study material upload/assignment routes
+app.use('/api/materials', materialsRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [
