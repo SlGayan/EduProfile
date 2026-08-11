@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { verifyToken, requireRole } from '../../middleware/authMiddleware.js';
 import { uploadMaterialFile } from './materials.upload.js';
-import { createMaterial, listMaterials, deleteMaterial } from './materials.controller.js';
+import { createMaterial, listMaterials, deleteMaterial, downloadMaterial } from './materials.controller.js';
 
 const router = Router();
 
@@ -12,6 +12,8 @@ const router = Router();
 router.post('/', verifyToken, requireRole(['TEACHER']), uploadMaterialFile, createMaterial);
 
 router.get('/', verifyToken, requireRole(['TEACHER', 'ADMINISTRATOR']), listMaterials);
+
+router.get('/:id/download', verifyToken, requireRole(['STUDENT', 'TEACHER', 'ADMINISTRATOR']), downloadMaterial);
 
 router.delete('/:id', verifyToken, requireRole(['TEACHER', 'ADMINISTRATOR']), deleteMaterial);
 

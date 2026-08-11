@@ -15,6 +15,7 @@ import {
   createActivity,
   listMyActivities,
 } from '../modules/activities/activities.controller.js';
+import { listMyMaterials } from '../modules/materials/materials.controller.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -74,6 +75,12 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
 // the STUDENT caller never reaches the handler, and the failure reads as an
 // auth problem rather than a routing one. Do not move it.
 router.get('/me/activities', requireRole(['STUDENT']), listMyActivities);
+
+// Story 9.4 — the caller's own study materials. Same route-ordering rule as
+// /me/activities above: must stay above the `/:id/...` routes at the bottom
+// of this file, or it would match id="me" there and 403 before reaching this
+// handler.
+router.get('/me/materials', requireRole(['STUDENT']), listMyMaterials);
 
 router.get('/search', searchLimiter, requireRole(['ADMINISTRATOR', 'PRINCIPAL', 'TEACHER']), async (req: AuthRequest, res) => {
   try {
