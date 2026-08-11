@@ -11,10 +11,12 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Search, RotateCcw, ArrowUpDown, AlertCircle } from "lucide-react"
+import { Search, RotateCcw, ArrowUpDown, AlertCircle, Trophy } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { getCurrentUser } from "@/lib/auth"
 import { sortStudents, formatDate, type SortField, type SortOrder } from "@/lib/studentSearch"
+import { StudentActivitiesDialog, type ActivityStudent } from "@/components/student-activities-dialog"
+import { canManageActivities } from "@/lib/activities"
 
 interface SearchFilters {
   fullName: string
@@ -71,6 +73,11 @@ export function StudentSearch() {
   const user = getCurrentUser()
   const isAuthorized = !user || user.role === "admin" || user.role === "principal" || user.role === "teacher"
 
+  // Hides the activities control from principals — see canManageActivities.
+  const showActivities = canManageActivities(user?.role)
+
+  const [activitiesStudent, setActivitiesStudent] = useState<ActivityStudent | null>(null)
+
   useEffect(() => {
     if (!isAuthorized) {
       router.replace("/unauthorized")
@@ -125,8 +132,13 @@ export function StudentSearch() {
     }
   }
 
+  // `has-[>svg]:px-0` as well as `px-0`: Button's base size class carries
+  // `has-[>svg]:px-3`, and every sort header holds an ArrowUpDown icon. Because
+  // the two differ by modifier, tailwind-merge keeps both and the `:has()` rule
+  // wins on specificity — leaving 12px of padding that pushes each header out
+  // of line with the cell values beneath it.
   const sortHeaderClassName = (field: SortField) =>
-    `flex items-center gap-1 px-0 hover:bg-transparent ${sortField === field ? "text-foreground font-semibold" : "text-muted-foreground"}`
+    `flex items-center gap-1 px-0 has-[>svg]:px-0 hover:bg-transparent ${sortField === field ? "text-foreground font-semibold" : "text-muted-foreground"}`
 
   const sortIconClassName = (field: SortField) =>
     `h-4 w-4 transition-transform ${sortField === field && sortOrder === "desc" ? "rotate-180" : ""}`
@@ -281,6 +293,7 @@ export function StudentSearch() {
                       <ArrowUpDown className={sortIconClassName("alYear")} />
                     </Button>
                   </TableHead>
+                  {showActivities && <TableHead className="text-right">Activities</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -291,6 +304,24 @@ export function StudentSearch() {
                     <TableCell>{formatDate(student.dateOfBirth)}</TableCell>
                     <TableCell>{student.olYear ?? "N/A"}</TableCell>
                     <TableCell>{student.alYear ?? "N/A"}</TableCell>
+                    {showActivities && (
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setActivitiesStudent({
+                              id: student.id,
+                              fullName: student.fullName,
+                              indexNumber: student.indexNumber,
+                            })
+                          }
+                        >
+                          <Trophy className="mr-2 h-4 w-4" />
+                          Activities
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -301,6 +332,15 @@ export function StudentSearch() {
             </div>
           )}
         </div>
+      )}
+
+      {showActivities && (
+        <StudentActivitiesDialog
+          student={activitiesStudent}
+          onOpenChange={(open) => {
+            if (!open) setActivitiesStudent(null)
+          }}
+        />
       )}
     </div>
   )
