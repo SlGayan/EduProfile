@@ -49,31 +49,34 @@ model Student {
 }
 
 model Teacher {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @unique
-  user      User     @relation(fields: [userId], references: [id])
-  classes   Class[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             Int             @id @default(autoincrement())
+  userId         Int             @unique
+  user           User            @relation(fields: [userId], references: [id])
+  classes        Class[]
+  studyMaterials StudyMaterial[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Class {
-  id        Int       @id @default(autoincrement())
-  name      String
-  year      Int?
-  teacherId Int?
-  teacher   Teacher?  @relation(fields: [teacherId], references: [id])
-  students  Student[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id             Int             @id @default(autoincrement())
+  name           String
+  year           Int?
+  teacherId      Int?
+  teacher        Teacher?        @relation(fields: [teacherId], references: [id])
+  students       Student[]
+  studyMaterials StudyMaterial[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Subject {
-  id        Int        @id @default(autoincrement())
-  name      String     @unique
-  termMarks TermMark[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id             Int             @id @default(autoincrement())
+  name           String          @unique
+  termMarks      TermMark[]
+  studyMaterials StudyMaterial[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model TermMark {
@@ -107,4 +110,23 @@ model ExtracurricularActivity {
   updatedAt    DateTime  @updatedAt
 
   @@index([studentId])
+}
+
+model StudyMaterial {
+  id           Int      @id @default(autoincrement())
+  title        String
+  description  String?
+  fileUrl      String
+  fileType     String
+  uploadedById Int
+  uploadedBy   Teacher  @relation(fields: [uploadedById], references: [id])
+  classId      Int?
+  class        Class?   @relation(fields: [classId], references: [id])
+  subjectId    Int?
+  subject      Subject? @relation(fields: [subjectId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([classId])
+  @@index([subjectId])
 }
