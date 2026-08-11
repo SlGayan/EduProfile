@@ -9,6 +9,7 @@ import marksRouter from './modules/marks/marks.routes.js';
 import activitiesRouter from './modules/activities/activities.routes.js';
 import materialsRouter from './modules/materials/materials.routes.js';
 import subjectsRouter from './modules/subjects/subjects.routes.js';
+import analyticsRouter from './modules/analytics/analytics.routes.js';
 
 dotenv.config();
 
@@ -50,6 +51,11 @@ app.use('/api/materials', materialsRouter);
 
 // Subject listing routes
 app.use('/api/subjects', subjectsRouter);
+
+// Academic performance analytics (class averages, progress trends, school-wide
+// aggregates). Mounted with the other routers, i.e. BEFORE the legacy mock
+// handlers below, so nothing can fall through to mock data.
+app.use('/api/analytics', analyticsRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [
