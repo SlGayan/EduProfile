@@ -12,6 +12,7 @@ import {
   Search,
   User,
   Award,
+  Trophy,
   School,
   BarChart3,
 } from "lucide-react"
@@ -50,6 +51,7 @@ const adminNavItems = [
 const studentNavItems = [
   { href: "/student/profile", label: "My Profile", icon: User },
   { href: "/student/marks", label: "My Marks", icon: Award },
+  { href: "/student/activities", label: "My Activities", icon: Trophy },
 ]
 
 export function AppSidebar({

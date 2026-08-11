@@ -302,3 +302,41 @@ export const deleteActivity = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+/**
+ * GET /api/students/me/activities — the caller's own record, role STUDENT.
+ *
+ * No authorization helper is needed: the student's identity comes from the
+ * verified token, so there is no cross-student check to perform. `req.user` is
+ * guaranteed by `requireRole` on the route, hence the non-null assertion rather
+ * than an unreachable 401 branch.
+ *
+ * MUST be registered above `/:id/activities` in routes/students.ts — otherwise
+ * `/me/activities` matches that route with id="me" and is rejected by its
+ * TEACHER/ADMINISTRATOR guard before ever reaching this handler.
+ */
+export const listMyActivities = async (req: AuthRequest, res: Response) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      select: { id: true },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    const activities = await prisma.extracurricularActivity.findMany({
+      where: { studentId: student.id },
+      // `id` tiebreaker: date-only values all store as UTC midnight, so ties
+      // are the norm and Postgres would otherwise order them arbitrarily.
+      orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+    });
+
+    // Empty is `200 []`, never 404 — the page's empty state depends on it.
+    return res.status(200).json(activities.map(serializeActivity));
+  } catch (err) {
+    console.error('Error listing own activities:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
