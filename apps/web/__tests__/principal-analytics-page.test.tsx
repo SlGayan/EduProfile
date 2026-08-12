@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest"
 import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import PrincipalAnalyticsPage from "@/app/(main)/principal/analytics/page"
 
@@ -16,6 +17,71 @@ const apiFetchMock = vi.fn()
 vi.mock("@/lib/apiFetch", () => ({
   apiFetch: (...args: unknown[]) => apiFetchMock(...args),
 }))
+
+/**
+ * Story 10.3. jsPDF is mocked at the MODULE boundary rather than mocking
+ * `lib/report-export`, so the real `buildReportModel` / `buildReportFilename` /
+ * `exportReportPdf` chain runs and the page-to-PDF wiring is genuinely
+ * exercised. Only the final byte-producing layer is faked — jsdom cannot render
+ * a PDF, so an assertion on output bytes would pass or fail for the wrong
+ * reason.
+ */
+const pdfSave = vi.fn()
+const pdfText = vi.fn()
+const autoTableMock = vi.fn()
+const toastWarning = vi.fn()
+const toastError = vi.fn()
+
+vi.mock("sonner", () => ({
+  toast: {
+    warning: (...args: unknown[]) => toastWarning(...args),
+    error: (...args: unknown[]) => toastError(...args),
+  },
+}))
+
+vi.mock("jspdf", () => ({
+  jsPDF: class {
+    setFontSize = vi.fn()
+    addPage = vi.fn()
+    text = (...args: unknown[]) => pdfText(...args)
+    splitTextToSize = (text: string) => [text]
+    save = (...args: unknown[]) => pdfSave(...args)
+  },
+}))
+
+/**
+ * The double MUST set `lastAutoTable`, exactly as the real plugin does
+ * (`DocHandler.getLastAutoTable` reads `jsPDFDocument.lastAutoTable`). Without
+ * it, `cursorY` silently falls back on every call and every line of vertical
+ * layout arithmetic in `exportReportPdf` becomes unassertable — deleting the
+ * cursor advances would leave all three tables overprinted and the suite green.
+ */
+vi.mock("jspdf-autotable", () => ({
+  autoTable: (doc: { lastAutoTable?: { finalY: number } }, options: { startY?: number }) => {
+    autoTableMock(doc, options)
+    doc.lastAutoTable = { finalY: (options.startY ?? 0) + 30 }
+  },
+}))
+
+/** Radix Select drives pointer APIs jsdom does not implement. */
+beforeAll(() => {
+  Element.prototype.hasPointerCapture = vi.fn(() => false)
+  Element.prototype.setPointerCapture = vi.fn()
+  Element.prototype.releasePointerCapture = vi.fn()
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
+/** Every string drawn with `doc.text`, i.e. everything outside the tables. */
+function pdfTextLines(): string[] {
+  return pdfText.mock.calls.map((call) => String(call[0]))
+}
+
+function pdfHeadCells(): string[] {
+  return autoTableMock.mock.calls.flatMap((call) => {
+    const options = call[1] as { head?: string[][] }
+    return (options.head ?? []).flat()
+  })
+}
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => body } as unknown as Response
@@ -74,6 +140,11 @@ const populated = {
 
 beforeEach(() => {
   apiFetchMock.mockReset()
+  pdfSave.mockReset()
+  pdfText.mockReset()
+  autoTableMock.mockReset()
+  toastWarning.mockReset()
+  toastError.mockReset()
 })
 
 describe("PrincipalAnalyticsPage — a class with no marks", () => {
@@ -202,6 +273,247 @@ describe("PrincipalAnalyticsPage — request shape", () => {
     await screen.findByText("Grade 10-A")
     const calls = apiFetchMock.mock.calls.map((c) => String(c[0]))
     expect(calls.some((url) => url.includes("grade"))).toBe(false)
+  })
+})
+
+describe("PrincipalAnalyticsPage — PDF export (Story 10.3, AC1 & AC2)", () => {
+  it("saves a PDF named for the unfiltered scope", async () => {
+    const user = userEvent.setup()
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    expect(pdfSave).toHaveBeenCalledWith("school_all-years.pdf")
+  })
+
+  it("names the file after the class and year actually selected, with the class id", async () => {
+    const user = userEvent.setup()
+    mockApi(populated, [
+      { id: 1, name: "Grade 10-A" },
+      { id: 2, name: "Grade 10-C" },
+    ])
+    renderPage()
+
+    await screen.findByText("30 students · 12 with marks")
+
+    await user.click(screen.getByLabelText("Class"))
+    await user.click(await screen.findByRole("option", { name: "Grade 10-A" }))
+    await user.click(screen.getByLabelText("Year"))
+    await user.click(await screen.findByRole("option", { name: "2026" }))
+
+    await user.click(screen.getByTestId("export-report"))
+
+    // The id is what keeps two same-named cohorts from colliding on disk.
+    expect(pdfSave).toHaveBeenCalledWith("grade-10-a-1_2026.pdf")
+  })
+
+  it("scopes the export to the RESOLVED class, not the raw held id", async () => {
+    const user = userEvent.setup()
+    // The held id (2) is NOT in the class list, so it must never reach the
+    // document. Without resolution the export would claim a scope the page is
+    // not displaying — the whole point of `resolvedClassId`.
+    mockApi(populated, [{ id: 1, name: "Grade 10-A" }])
+    renderPage()
+
+    await screen.findByText("30 students · 12 with marks")
+    await user.click(screen.getByTestId("export-report"))
+
+    // Resolution falls back to ALL, so no class name and no id in the filename.
+    expect(pdfSave).toHaveBeenCalledWith("school_all-years.pdf")
+    expect(pdfTextLines().join(" ")).toContain("All classes")
+  })
+
+  it("writes the title, scope line and generated-at stamp into the document", async () => {
+    const user = userEvent.setup()
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    const lines = pdfTextLines()
+    // AC1: "that scope's summary data" reaches the reader ONLY via the scope
+    // line. Asserting the model alone let both of these be deleted silently.
+    expect(lines).toContain("EduProfile — Academic Performance Report")
+    expect(lines.join(" ")).toMatch(/Class: All classes/)
+    expect(lines.join(" ")).toMatch(/Generated \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)/)
+  })
+
+  it("prints the explanation of why totals do not sum to the class rows", async () => {
+    const user = userEvent.setup()
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    expect(pdfTextLines().join(" ")).toMatch(/not the sum of the class rows/i)
+  })
+
+  it("prints the unassigned-marks note into the document when there are any", async () => {
+    const user = userEvent.setup()
+    mockApi({ ...populated, totals: { markCount: 240, studentCount: 30, unassignedMarkCount: 7 } })
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    expect(pdfTextLines().join(" ")).toMatch(/7 marks belong to students in no class/i)
+  })
+
+  it("lays the three tables out down the page instead of overprinting them", async () => {
+    const user = userEvent.setup()
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    const startYs = autoTableMock.mock.calls.map((c) => (c[1] as { startY: number }).startY)
+    expect(startYs).toHaveLength(3)
+    // Strictly increasing: each table starts below the one before it.
+    expect(startYs[1]).toBeGreaterThan(startYs[0])
+    expect(startYs[2]).toBeGreaterThan(startYs[1])
+  })
+
+  it("warns which names the PDF cannot render, rather than garbling them silently", async () => {
+    const user = userEvent.setup()
+    mockApi({
+      ...populated,
+      subjectAverages: [{ subjectId: 1, subject: "ගණිතය", average: 68.9, markCount: 240 }],
+    })
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    expect(pdfSave).toHaveBeenCalled() // the export still succeeds
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining("ගණිතය"))
+  })
+
+  it("stays silent when every name is renderable", async () => {
+    const user = userEvent.setup()
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    expect(toastWarning).not.toHaveBeenCalled()
+  })
+
+  it("explains in visible text why Export is unavailable", async () => {
+    mockApi({
+      scope: { classId: null, year: null },
+      totals: { markCount: 0, studentCount: 0, unassignedMarkCount: 0 },
+      subjectAverages: [],
+      classBreakdown: [],
+    })
+    renderPage()
+
+    await screen.findByTestId("analytics-empty-state")
+    // A `title` tooltip cannot work here: shadcn's Button sets
+    // `disabled:pointer-events-none`, so hover never fires.
+    const reason = screen.getByTestId("export-blocked-reason")
+    expect(reason).toBeVisible()
+    expect(reason).toHaveTextContent(/no marks are recorded/i)
+    expect(screen.getByTestId("export-report")).toHaveAttribute(
+      "aria-describedby",
+      "export-blocked-reason"
+    )
+  })
+
+  it("keeps the button's accessible name equal to its visible label", async () => {
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    // WCAG 2.5.3: an aria-label would replace "Export PDF" and would mutate
+    // with query state, leaving the control without a stable identity.
+    const button = screen.getByTestId("export-report")
+    expect(button).not.toHaveAttribute("aria-label")
+    expect(button).toHaveAccessibleName("Export PDF")
+  })
+
+  it("exports the totals block, never the sum of the class rows", async () => {
+    const user = userEvent.setup()
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    // Targets the SUMMARY table specifically. Asserting "240 appears somewhere
+    // in the document" passes for the wrong reason: `subjectAverages[0]`
+    // carries markCount 240 too, so it survives even when the summary is
+    // wrongly derived by summing the class rows. Verified by mutation.
+    const summary = autoTableMock.mock.calls.find(
+      (call) => (call[1] as { head?: string[][] }).head?.[0]?.[0] === "Summary"
+    )
+    expect(summary).toBeDefined()
+    const summaryBody = (summary![1] as { body: string[][] }).body
+
+    // The class rows sum to 120 marks / 58 students; `totals` says 240 / 30.
+    expect(summaryBody).toContainEqual(["Marks in scope", "240"])
+    expect(summaryBody).toContainEqual(["Students with marks", "30"])
+  })
+
+  it("writes a null class average into the PDF as an em dash, never 0", async () => {
+    const user = userEvent.setup()
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-C")
+    await user.click(screen.getByTestId("export-report"))
+
+    const classRow = autoTableMock.mock.calls
+      .flatMap((call) => ((call[1] as { body?: string[][] }).body ?? []))
+      .find((row) => row[0] === "Grade 10-C")
+
+    expect(classRow).toBeDefined()
+    expect(classRow![1]).toBe("—")
+    expect(classRow![1]).not.toBe("0")
+  })
+
+  it("gives enrolled and scored students their own PDF columns", async () => {
+    const user = userEvent.setup()
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("Grade 10-A")
+    await user.click(screen.getByTestId("export-report"))
+
+    const heads = pdfHeadCells()
+    expect(heads).toContain("Students enrolled")
+    expect(heads).toContain("With marks")
+
+    const classRow = autoTableMock.mock.calls
+      .flatMap((call) => ((call[1] as { body?: string[][] }).body ?? []))
+      .find((row) => row[0] === "Grade 10-A")
+    expect(classRow).toEqual(["Grade 10-A", "72.4", "30", "12", "120"])
+  })
+
+  it("disables Export when the scope has no marks", async () => {
+    mockApi({
+      scope: { classId: null, year: null },
+      totals: { markCount: 0, studentCount: 0, unassignedMarkCount: 0 },
+      subjectAverages: [],
+      classBreakdown: [],
+    })
+    renderPage()
+
+    await screen.findByTestId("analytics-empty-state")
+    expect(screen.getByTestId("export-report")).toBeDisabled()
+  })
+
+  it("disables Export when analytics failed to load", async () => {
+    mockApi({ error: "Insufficient permissions" }, [], false, 403)
+    renderPage()
+
+    await screen.findByText("Insufficient permissions")
+    expect(screen.getByTestId("export-report")).toBeDisabled()
   })
 })
 

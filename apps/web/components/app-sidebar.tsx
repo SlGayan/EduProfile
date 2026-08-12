@@ -39,6 +39,11 @@ const principalNavItems = [
   { href: "/principal/dashboard", label: "Dashboard", icon: Home },
   { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/principal/search-students", label: "Search Students", icon: Search },
+  // Story 10.2 shipped /principal/analytics with no nav entry and logged the
+  // omission as a review decision. Resolved by taking that review's option (b):
+  // add the entry now, leaving Story 10.4 to repoint the Reports link below
+  // (which still targets /principal/reports — a page that does not exist).
+  { href: "/principal/analytics", label: "Analytics", icon: TrendingUp },
   { href: "/principal/reports", label: "Reports", icon: FileText },
 ]
 

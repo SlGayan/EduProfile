@@ -87,14 +87,34 @@ describe("AppSidebar — Story 10.2 analytics entry", () => {
     )
   })
 
-  // Task 4.2: repointing the principal/admin Reports links at the analytics
-  // pages is explicitly Story 10.4's job, not this story's.
-  it("does not add an analytics entry to the principal or admin nav", () => {
-    const { unmount } = render(<AppSidebar role="principal" />)
-    expect(screen.queryByRole("link", { name: /analytics/i })).not.toBeInTheDocument()
-    unmount()
+  // Story 10.2 originally deferred the principal entry to Story 10.4 and this
+  // test pinned its absence. That review decision was resolved by taking option
+  // (b) — add the entry now — because the page was otherwise reachable only by
+  // typing the URL. Repointing the /principal/reports and /admin/reports links
+  // remains Story 10.4's job.
+  it("gives the principal a link to /principal/analytics", () => {
+    render(<AppSidebar role="principal" />)
 
+    expect(screen.getByRole("link", { name: /analytics/i })).toHaveAttribute(
+      "href",
+      "/principal/analytics",
+    )
+  })
+
+  it("keeps the principal's other entries alongside it", () => {
+    render(<AppSidebar role="principal" />)
+
+    for (const label of [/dashboard/i, /class management/i, /search students/i, /reports/i]) {
+      expect(screen.getByRole("link", { name: label })).toBeInTheDocument()
+    }
+  })
+
+  it("still does not add an analytics entry to the admin nav", () => {
     render(<AppSidebar role="admin" />)
+
+    // ADMINISTRATOR is authorised by the API but blocked from /principal/* by
+    // middleware.ts, so an admin has no reachable analytics page. Tracked as an
+    // open decision on Story 10.2, deliberately not resolved here.
     expect(screen.queryByRole("link", { name: /analytics/i })).not.toBeInTheDocument()
   })
 
