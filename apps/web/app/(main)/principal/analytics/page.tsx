@@ -21,13 +21,15 @@ import {
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { AlertCircle, BarChart3, Info } from "lucide-react"
+import { AlertCircle, BarChart3, Download, Info, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import {
   fetchAllClasses,
   fetchSchoolAnalytics,
@@ -35,6 +37,12 @@ import {
   formatStudentCount,
   toSchoolSubjectRows,
 } from "@/lib/analytics"
+import {
+  buildReportFilename,
+  buildReportModel,
+  exportReportPdf,
+  findUnsupportedNames,
+} from "@/lib/report-export"
 
 const ALL = "all"
 
@@ -52,6 +60,7 @@ function currentYearOptions(): number[] {
 export default function PrincipalAnalyticsPage() {
   const [classId, setClassId] = useState<string>(ALL)
   const [year, setYear] = useState<string>(ALL)
+  const [exporting, setExporting] = useState(false)
 
   // `error` is deliberately consumed: discarding it made a broken class list
   // invisible — the filter silently offered nothing but "All classes".
@@ -93,6 +102,53 @@ export default function PrincipalAnalyticsPage() {
   const totals = analytics?.totals
   const isEmpty = subjectRows.length === 0 && breakdown.every((c) => c.markCount === 0)
 
+  // Story 10.3. Taken from the RESOLVED class, never the raw held id, so the
+  // exported document can never claim a scope the page is not showing. `null`
+  // means "All classes" — not a missing name.
+  const selectedClass =
+    resolvedClassId === ALL ? null : (classes?.find((c) => String(c.id) === resolvedClassId) ?? null)
+  // `Class.name` is not unique, so the id travels with the name — two cohorts
+  // called "Grade 10-A" would otherwise export to the same filename.
+  const exportScope = {
+    className: selectedClass?.name ?? null,
+    classId: selectedClass?.id ?? null,
+    year: yearFilter ?? null,
+  }
+
+  // Exporting an empty or errored scope would produce a document asserting the
+  // school has no marks, which is exactly the misreading this epic exists to
+  // prevent.
+  const exportBlockedReason = error
+    ? "Analytics could not be loaded, so there is nothing to export."
+    : isLoading
+      ? "Waiting for analytics to load."
+      : isEmpty || !analytics
+        ? "No marks are recorded in the selected scope, so there is nothing to export."
+        : null
+
+  async function handleExport() {
+    if (exporting || !analytics) return
+    setExporting(true)
+    try {
+      await exportReportPdf(
+        buildReportModel(analytics, exportScope),
+        buildReportFilename(exportScope)
+      )
+      // The PDF uses jsPDF's standard fonts, which are WinAnsi-only. Rather than
+      // shipping a board document with silently garbled names, say which ones.
+      const unsupported = findUnsupportedNames(analytics, exportScope)
+      if (unsupported.length > 0) {
+        toast.warning(
+          `Some names may not display correctly in the PDF: ${unsupported.join(", ")}`
+        )
+      }
+    } catch {
+      toast.error("Failed to generate the report")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-balance text-3xl font-bold tracking-tight">School Analytics</h1>
@@ -105,7 +161,7 @@ export default function PrincipalAnalyticsPage() {
             no grade field.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-4">
+        <CardContent className="flex flex-wrap items-end gap-4">
           <div className="min-w-48">
             <label className="mb-1 block text-sm font-medium" htmlFor="school-class">
               Class
@@ -149,6 +205,40 @@ export default function PrincipalAnalyticsPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Sits with the filters it exports — the scope above IS the report. */}
+          <div className="ml-auto self-end">
+            <Button
+              onClick={handleExport}
+              disabled={exporting || exportBlockedReason !== null}
+              // No `aria-label`: it would override the visible "Export PDF"
+              // text, breaking WCAG 2.5.3 Label-in-Name and giving the control
+              // a name that mutates with query state. The reason lives in
+              // visible copy below, referenced here instead.
+              aria-describedby={exportBlockedReason ? "export-blocked-reason" : undefined}
+              data-testid="export-report"
+            >
+              {exporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              {exporting ? "Generating…" : "Export PDF"}
+            </Button>
+            {/* Rendered as visible text, not a `title`: shadcn's Button carries
+                `disabled:pointer-events-none`, so a native tooltip on a disabled
+                button never fires — the explanation would be unreachable in
+                exactly the states it exists for. */}
+            {exportBlockedReason ? (
+              <p
+                id="export-blocked-reason"
+                className="mt-1 max-w-56 text-sm text-muted-foreground"
+                data-testid="export-blocked-reason"
+              >
+                {exportBlockedReason}
+              </p>
+            ) : null}
           </div>
         </CardContent>
       </Card>
