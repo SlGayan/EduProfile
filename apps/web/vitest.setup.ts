@@ -60,6 +60,29 @@ if (typeof window !== "undefined") {
   })
 }
 
+/**
+ * jsdom does not implement ResizeObserver, and recharts ResponsiveContainer
+ * constructs one on mount, so any component rendering a chart throws
+ * "ResizeObserver is not defined" before a single assertion runs.
+ *
+ * Added in Story 10.2, the first story in this repo to render a chart. The stub
+ * reports no size, which is correct for jsdom: charts mount and their
+ * surrounding markup is assertable, but the SVG has no dimensions, so do not
+ * write assertions against chart geometry.
+ */
+if (typeof global !== "undefined" && !("ResizeObserver" in global)) {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(global, "ResizeObserver", {
+    value: ResizeObserverStub,
+    writable: true,
+    configurable: true,
+  })
+}
+
 // Clear localStorage before each test
 beforeEach(() => {
   localStorageMock.clear()

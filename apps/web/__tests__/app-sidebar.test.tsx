@@ -60,3 +60,47 @@ describe("AppSidebar — student navigation (subtask 6.5)", () => {
     expect(screen.queryByRole("link", { name: /my activities/i })).not.toBeInTheDocument()
   })
 })
+
+/**
+ * Story 10.2, Task 4.1 and 4.2.
+ *
+ * Same reasoning as above: AppSidebar server-renders the teacher nav and swaps
+ * client-side from localStorage, so a fetched HTML page proves nothing about
+ * which role sees what. Rendering directly is the only real check.
+ */
+describe("AppSidebar — Story 10.2 analytics entry", () => {
+  it("gives the teacher a link to /teacher/analytics", () => {
+    render(<AppSidebar role="teacher" />)
+
+    expect(screen.getByRole("link", { name: /analytics/i })).toHaveAttribute(
+      "href",
+      "/teacher/analytics",
+    )
+  })
+
+  it("keeps the existing Class Marks link alongside it", () => {
+    render(<AppSidebar role="teacher" />)
+
+    expect(screen.getByRole("link", { name: /class marks/i })).toHaveAttribute(
+      "href",
+      "/teacher/class-marks",
+    )
+  })
+
+  // Task 4.2: repointing the principal/admin Reports links at the analytics
+  // pages is explicitly Story 10.4's job, not this story's.
+  it("does not add an analytics entry to the principal or admin nav", () => {
+    const { unmount } = render(<AppSidebar role="principal" />)
+    expect(screen.queryByRole("link", { name: /analytics/i })).not.toBeInTheDocument()
+    unmount()
+
+    render(<AppSidebar role="admin" />)
+    expect(screen.queryByRole("link", { name: /analytics/i })).not.toBeInTheDocument()
+  })
+
+  it("does not leak the analytics entry into the student nav", () => {
+    render(<AppSidebar role="student" />)
+
+    expect(screen.queryByRole("link", { name: /analytics/i })).not.toBeInTheDocument()
+  })
+})

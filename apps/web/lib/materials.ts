@@ -49,22 +49,8 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * Extracts a human-readable message from an API error body. Zod failures
- * return `{ error: 'Invalid input', details: [...] }` — surface the first
- * issue's message when present, since "Invalid input" alone is not useful.
+ * Moved to `lib/utils.ts` during Story 10.2 — a third feature needed it and the
+ * story forbade a third copy. Re-exported so every existing caller and
+ * `lib/__tests__/materials.test.ts` keep working against `../materials`.
  */
-export function extractApiError(body: unknown, fallback: string): string {
-  if (body && typeof body === "object") {
-    const record = body as Record<string, unknown>
-    if (Array.isArray(record.details) && record.details.length > 0) {
-      const first = record.details[0] as { message?: unknown }
-      if (typeof first?.message === "string") {
-        return first.message
-      }
-    }
-    if (typeof record.error === "string") {
-      return record.error
-    }
-  }
-  return fallback
-}
+export { extractApiError } from "./utils"
