@@ -104,7 +104,9 @@ describe("AppSidebar — Story 10.2 analytics entry", () => {
   it("keeps the principal's other entries alongside it", () => {
     render(<AppSidebar role="principal" />)
 
-    for (const label of [/dashboard/i, /class management/i, /search students/i, /reports/i]) {
+    // "Reports" was removed by Story 10.4 — Analytics (asserted above) already
+    // covers it, and a link to the same URL twice would be redundant.
+    for (const label of [/dashboard/i, /class management/i, /search students/i]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument()
     }
   })
@@ -122,5 +124,45 @@ describe("AppSidebar — Story 10.2 analytics entry", () => {
     render(<AppSidebar role="student" />)
 
     expect(screen.queryByRole("link", { name: /analytics/i })).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Story 10.4, Task 3.
+ *
+ * The principal's Reports entry pointed at /principal/reports, a page that
+ * never existed — Analytics already covers it, so Reports is removed rather
+ * than duplicated. Dashboard, Settings and Reports were removed from the
+ * admin nav: /admin/dashboard and /admin/settings point to pages no epic
+ * covers, and /admin/reports would have to point at /principal/analytics,
+ * which middleware.ts blocks the admin role from reaching.
+ */
+describe("AppSidebar — Story 10.4 nav cleanup", () => {
+  it("gives the principal exactly one link to the reports/analytics URL", () => {
+    render(<AppSidebar role="principal" />)
+
+    const matches = screen.getAllByRole("link", { name: /reports|analytics/i })
+    expect(matches).toHaveLength(1)
+    expect(matches[0]).toHaveAttribute("href", "/principal/analytics")
+  })
+
+  it("removes Dashboard, Settings and Reports from the admin nav", () => {
+    render(<AppSidebar role="admin" />)
+
+    expect(screen.queryByRole("link", { name: /dashboard/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /reports/i })).not.toBeInTheDocument()
+  })
+
+  it("keeps the admin's remaining entries", () => {
+    render(<AppSidebar role="admin" />)
+
+    for (const [label, href] of [
+      [/user management/i, "/admin/users"],
+      [/class management/i, "/admin/classes"],
+      [/search students/i, "/admin/search-students"],
+    ] as const) {
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", href)
+    }
   })
 })
