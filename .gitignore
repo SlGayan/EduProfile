@@ -62,10 +62,8 @@ _bmad-output/
 .bmad-infrastructure-devops/
 .clinerules/
 .gemini/
-.github/
 .vscode/
-docs/*
-docs
 .agents/
 .agent/
 .claude/
+docs/*

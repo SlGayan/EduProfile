@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -383,11 +383,12 @@ export default function ClassManagementPage() {
   const queryClient = useQueryClient()
 
   // Role guard — only ADMINISTRATOR or PRINCIPAL (stored lowercase in auth)
-  const user = getCurrentUser()
-  if (user && user.role !== "admin" && user.role !== "principal") {
-    router.replace("/unauthorized")
-    return null
-  }
+  useEffect(() => {
+    const user = getCurrentUser()
+    if (user && user.role !== "admin" && user.role !== "principal") {
+      router.replace("/unauthorized")
+    }
+  }, [router])
 
   // Modal state
   const [createOpen, setCreateOpen] = useState(false)
