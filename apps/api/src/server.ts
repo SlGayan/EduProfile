@@ -1,5 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors';
+import { PrismaClient } from '@prisma/client';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import classesRouter from './routes/classes.js';
@@ -16,10 +18,29 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+const prisma = new PrismaClient();
+
 // Middleware
+app.use(cors({
+  // credentials:true + origin:'*' is invalid — browsers reject it.
+  // When ALLOWED_ORIGINS is not set (local dev), CORS is disabled; local dev
+  // hits the API through the Next.js rewrite proxy (same-origin), so no CORS needed.
+  // In production, set ALLOWED_ORIGINS to the comma-separated list of frontend URLs.
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : false,
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
+app.get('/api/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(500).json({ status: 'error', database: 'disconnected', timestamp: new Date().toISOString() });
+  }
+});
+
 app.get('/', (req, res) => {
   res.json({ message: 'EduProfile API is running!' });
 });
@@ -121,9 +142,11 @@ app.get('/api/marks', async (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 EduProfile API server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`🚀 EduProfile API server running on port ${PORT}`);
+  });
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
@@ -133,3 +156,5 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   process.exit(0);
 });
+
+export default app;
