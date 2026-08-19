@@ -5,13 +5,15 @@ import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import Link from "next/link"
+import Image from "next/image"
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Eye, EyeOff } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "sonner"
 
 // Define validation schema
 const registerSchema = z.object({
@@ -31,6 +33,8 @@ type RegisterDefaults = z.infer<typeof registerSchema>
 export default function RegisterPage() {
   const [serverError, setServerError] = useState<string | null>(null)
   const [success, setSuccess] = useState<boolean>(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const {
     register,
@@ -64,7 +68,9 @@ export default function RegisterPage() {
 
       setSuccess(true)
     } catch (err: unknown) {
-      setServerError(err instanceof Error ? err.message : String(err) || "An unexpected error occurred.")
+      const errorMessage = err instanceof Error ? err.message : String(err) || "An unexpected error occurred."
+      setServerError(errorMessage)
+      toast.error(errorMessage)
     }
   }
 
@@ -86,8 +92,9 @@ export default function RegisterPage() {
 
   return (
     <Card className="w-full max-w-md shadow-lg border-2">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold tracking-tight text-center">Create an Account</CardTitle>
+      <CardHeader className="justify-items-center gap-2">
+        <Image src="/logo.png" alt="EduProfile" width={72} height={72} priority />
+        <CardTitle className="text-2xl font-bold tracking-tight text-center">EduProfile Create an Account</CardTitle>
         <CardDescription className="text-center">Enter your details to register</CardDescription>
       </CardHeader>
 
@@ -119,14 +126,27 @@ export default function RegisterPage() {
 
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              aria-invalid={!!errors.password}
-              aria-describedby={errors.password ? "password-error" : undefined}
-              {...register("password")}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                aria-invalid={!!errors.password}
+                aria-describedby={errors.password ? "password-error" : undefined}
+                className="pr-9"
+                {...register("password")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             {errors.password && (
               <p id="password-error" role="alert" className="text-sm text-destructive">
                 {errors.password.message}
@@ -136,14 +156,27 @@ export default function RegisterPage() {
 
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              placeholder="••••••••"
-              aria-invalid={!!errors.confirmPassword}
-              aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined}
-              {...register("confirmPassword")}
-            />
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="••••••••"
+                aria-invalid={!!errors.confirmPassword}
+                aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined}
+                className="pr-9"
+                {...register("confirmPassword")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                aria-pressed={showConfirmPassword}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             {errors.confirmPassword && (
               <p id="confirmPassword-error" role="alert" className="text-sm text-destructive">
                 {errors.confirmPassword.message}
@@ -152,7 +185,7 @@ export default function RegisterPage() {
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col space-y-4">
+        <CardFooter className="flex flex-col space-y-4 py-2">
           <Button type="submit" className="w-full" disabled={isSubmitting} aria-busy={isSubmitting}>
             {isSubmitting ? "Creating account..." : "Sign Up"}
           </Button>
