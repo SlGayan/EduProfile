@@ -14,6 +14,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
 // prefix match (e.g. "/admin/search-students" also starts with "/admin").
 const SHARED_ROUTES: { path: string; roles: string[] }[] = [
     { path: "/admin/search-students", roles: ["admin", "principal", "teacher"] },
+    { path: "/admin/classes", roles: ["admin", "principal"] },
 ]
 
 export function middleware(request: NextRequest) {

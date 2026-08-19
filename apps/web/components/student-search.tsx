@@ -198,6 +198,8 @@ export function StudentSearch() {
             <Input
               id="olYear"
               type="number"
+              min={1950}
+              max={2100}
               placeholder="e.g., 2020"
               value={filters.olYear}
               onChange={(e) => handleInputChange("olYear", e.target.value)}
@@ -209,6 +211,8 @@ export function StudentSearch() {
             <Input
               id="alYear"
               type="number"
+              min={1950}
+              max={2100}
               placeholder="e.g., 2023"
               value={filters.alYear}
               onChange={(e) => handleInputChange("alYear", e.target.value)}
