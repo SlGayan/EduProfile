@@ -68,6 +68,18 @@ export function AppSidebar({
     }
   }, [])
 
+  const handleLinkClick = () => {
+    if (window.innerWidth < 1024) {
+      const sidebar = document.getElementById("sidebar")
+      const overlay = document.getElementById("sidebar-overlay")
+
+      if (sidebar && overlay) {
+        sidebar.classList.add("max-lg:-translate-x-full")
+        overlay.classList.add("hidden")
+      }
+    }
+  }
+
   const navItems =
     role === "admin"
       ? adminNavItems
@@ -123,6 +135,7 @@ export function AppSidebar({
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={handleLinkClick}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                     isActive
