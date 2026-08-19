@@ -50,7 +50,7 @@ export function AppHeader() {
       <div className="ml-auto flex items-center gap-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+            <Button variant="ghost" className="relative h-10 pr-2 pl-1 rounded-full flex items-center gap-2">
               <Avatar>
                 <AvatarImage src="/placeholder-user.jpg" alt="User" />
                 <AvatarFallback>
@@ -61,6 +61,7 @@ export function AppHeader() {
                     .toUpperCase() || "U"}
                 </AvatarFallback>
               </Avatar>
+              <span className="hidden sm:inline text-sm">{user?.email}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
