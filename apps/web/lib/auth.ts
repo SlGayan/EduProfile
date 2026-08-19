@@ -1,3 +1,4 @@
+import { toast } from "sonner"
 import type { User } from "./types"
 
 // Re-export for backwards compat (tests import MockUser from here)
@@ -83,6 +84,7 @@ export async function login(email: string, password: string): Promise<User> {
       mustChangePassword: data.user.mustChangePassword,
     }
     storeUser(user)
+    toast.success("Login successful")
     return user
   } catch (err) {
     // On network error or missing API, fall back to mock login for demo
@@ -90,8 +92,14 @@ export async function login(email: string, password: string): Promise<User> {
     const e: any = err
     if (e?.message && e.message.includes("Failed to fetch")) {
       const user = mockLogin(email, password)
-      if (user) return user
+      if (user) {
+        toast.success("Login successful (mock)")
+        return user
+      }
     }
+
+    const errorMessage = (err as Error).message || "An unexpected error occurred during login."
+    toast.error(errorMessage)
     throw err
   }
 }
