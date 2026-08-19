@@ -187,6 +187,7 @@ export function StudentSearch() {
             <Label htmlFor="nicNumber">NIC Number</Label>
             <Input
               id="nicNumber"
+              maxLength={10}
               placeholder="Enter NIC..."
               value={filters.nicNumber}
               onChange={(e) => handleInputChange("nicNumber", e.target.value)}
@@ -202,7 +203,10 @@ export function StudentSearch() {
               max={2100}
               placeholder="e.g., 2020"
               value={filters.olYear}
-              onChange={(e) => handleInputChange("olYear", e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value.slice(0, 4);
+                handleInputChange("olYear", val);
+              }}
             />
           </div>
 
@@ -215,7 +219,10 @@ export function StudentSearch() {
               max={2100}
               placeholder="e.g., 2023"
               value={filters.alYear}
-              onChange={(e) => handleInputChange("alYear", e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value.slice(0, 4);
+                handleInputChange("alYear", val);
+              }}
             />
           </div>
         </div>
