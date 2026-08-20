@@ -1,22 +1,82 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors';
+import { PrismaClient } from '@prisma/client';
 import authRouter from './routes/auth.js';
+import usersRouter from './routes/users.js';
+import classesRouter from './routes/classes.js';
+import studentsRouter from './routes/students.js';
+import teachersRouter from './routes/teachers.js';
+import marksRouter from './modules/marks/marks.routes.js';
+import activitiesRouter from './modules/activities/activities.routes.js';
+import materialsRouter from './modules/materials/materials.routes.js';
+import subjectsRouter from './modules/subjects/subjects.routes.js';
+import analyticsRouter from './modules/analytics/analytics.routes.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+const prisma = new PrismaClient();
+
 // Middleware
+app.use(cors({
+  // credentials:true + origin:'*' is invalid — browsers reject it.
+  // When ALLOWED_ORIGINS is not set (local dev), CORS is disabled; local dev
+  // hits the API through the Next.js rewrite proxy (same-origin), so no CORS needed.
+  // In production, set ALLOWED_ORIGINS to the comma-separated list of frontend URLs.
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : false,
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
+app.get('/api/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(500).json({ status: 'error', database: 'disconnected', timestamp: new Date().toISOString() });
+  }
+});
+
 app.get('/', (req, res) => {
   res.json({ message: 'EduProfile API is running!' });
 });
 
 // Auth routes
 app.use('/api/auth', authRouter);
+
+// User management routes
+app.use('/api/users', usersRouter);
+
+// Class management routes
+app.use('/api/classes', classesRouter);
+
+// Student management routes (bulk import)
+app.use('/api/students', studentsRouter);
+
+// Teacher listing routes
+app.use('/api/teachers', teachersRouter);
+
+// Marks management routes (bulk import)
+app.use('/api/marks', marksRouter);
+
+// Extracurricular activity routes (update/delete by activity id).
+// The student-scoped list/create routes are served by studentsRouter above.
+app.use('/api/activities', activitiesRouter);
+
+// Study material upload/assignment routes
+app.use('/api/materials', materialsRouter);
+
+// Subject listing routes
+app.use('/api/subjects', subjectsRouter);
+
+// Academic performance analytics (class averages, progress trends, school-wide
+// aggregates). Mounted with the other routers, i.e. BEFORE the legacy mock
+// handlers below, so nothing can fall through to mock data.
+app.use('/api/analytics', analyticsRouter);
 
 // Mock data for now - will be replaced with actual database queries
 const mockClasses = [
@@ -50,59 +110,12 @@ const mockStudents = [
   }
 ];
 
-const mockTeachers = [
-  {
-    id: 1,
-    name: 'John Doe',
-    email: 'teacher@edu.com',
-    classes: [{ id: 1, name: 'Grade 10-A' }]
-  }
-];
-
-// Classes routes
-app.get('/api/classes', async (req, res) => {
-  try {
-    res.json(mockClasses);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch classes' });
-  }
-});
-
-app.get('/api/classes/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const classData = mockClasses.find(c => c.id === parseInt(id));
-
-    if (!classData) {
-      return res.status(404).json({ error: 'Class not found' });
-    }
-
-    res.json(classData);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch class' });
-  }
-});
-
 // Students routes
 app.get('/api/students', async (req, res) => {
   try {
     res.json(mockStudents);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch students' });
-  }
-});
-
-app.get('/api/students/search', async (req, res) => {
-  try {
-    const { query } = req.query;
-    const filteredStudents = mockStudents.filter(student =>
-      student.firstName.toLowerCase().includes((query as string).toLowerCase()) ||
-      student.lastName.toLowerCase().includes((query as string).toLowerCase()) ||
-      student.email.toLowerCase().includes((query as string).toLowerCase())
-    );
-    res.json(filteredStudents);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to search students' });
   }
 });
 
@@ -119,15 +132,6 @@ app.get('/api/students/me', async (req, res) => {
   }
 });
 
-// Teachers routes
-app.get('/api/teachers', async (req, res) => {
-  try {
-    res.json(mockTeachers);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch teachers' });
-  }
-});
-
 // Marks routes
 app.get('/api/marks', async (req, res) => {
   try {
@@ -137,19 +141,12 @@ app.get('/api/marks', async (req, res) => {
   }
 });
 
-app.get('/api/marks/my-marks', async (req, res) => {
-  try {
-    // Mock current user - in real app this would come from auth
-    res.json([]);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch marks' });
-  }
-});
-
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 EduProfile API server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`🚀 EduProfile API server running on port ${PORT}`);
+  });
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
@@ -159,3 +156,5 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   process.exit(0);
 });
+
+export default app;

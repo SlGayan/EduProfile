@@ -1,8 +1,36 @@
+"use client"
+
+import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Upload, FileSpreadsheet } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle, Upload, FileSpreadsheet } from "lucide-react"
+import { fetchClassAnalytics, fetchTeacherClasses } from "@/lib/analytics"
 
+// No role guard here by design: middleware.ts already redirects any
+// non-teacher away from /teacher/*, matching every sibling teacher page.
 export default function TeacherDashboardPage() {
+  const {
+    data: classes,
+    isLoading: classesLoading,
+    error: classesError,
+  } = useQuery({
+    queryKey: ["analytics", "teacher-classes"],
+    queryFn: fetchTeacherClasses,
+    retry: false,
+  })
+
+  const primaryClass = classes?.[0]
+  const classId = primaryClass ? primaryClass.id : undefined
+
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ["class-analytics", classId, undefined, undefined],
+    queryFn: () => fetchClassAnalytics(classId as number),
+    enabled: classId !== undefined,
+    retry: false,
+  })
+
   return (
     <div className="space-y-6">
       <div>
@@ -34,10 +62,36 @@ export default function TeacherDashboardPage() {
             <CardTitle>Your Class</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <p className="text-2xl font-bold">Grade 11-A</p>
-              <p className="text-sm text-muted-foreground">32 students enrolled</p>
-            </div>
+            {classesLoading ? (
+              <div className="space-y-2" data-testid="your-class-skeleton">
+                <Skeleton className="h-7 w-32" />
+                <Skeleton className="h-4 w-40" />
+              </div>
+            ) : classesError ? (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {classesError instanceof Error ? classesError.message : "Failed to load your classes."}
+                </AlertDescription>
+              </Alert>
+            ) : !primaryClass ? (
+              <p className="text-sm text-muted-foreground">No class assigned yet.</p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-2xl font-bold">{primaryClass.name}</p>
+                {analyticsLoading ? (
+                  <Skeleton className="h-4 w-48" />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {analytics?.studentProgress.length ?? 0} student
+                    {(analytics?.studentProgress.length ?? 0) === 1 ? "" : "s"} with marks recorded
+                  </p>
+                )}
+                {classes && classes.length > 1 && (
+                  <p className="text-xs text-muted-foreground">+{classes.length - 1} more</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -5,14 +5,18 @@ import {
   Users,
   Upload,
   FileText,
-  Settings,
+  FileSpreadsheet,
   ChevronLeft,
   ChevronRight,
   Search,
   User,
   Award,
+  Trophy,
   School,
+  BarChart3,
+  TrendingUp,
 } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState, useEffect } from "react"
@@ -23,28 +27,31 @@ import { getCurrentUser } from "@/lib/auth"
 const teacherNavItems = [
   { href: "/teacher/dashboard", label: "Dashboard", icon: Home },
   { href: "/teacher/import-students", label: "Import Students", icon: Upload },
+  { href: "/teacher/import-marks", label: "Import Marks", icon: FileSpreadsheet },
   { href: "/teacher/search-students", label: "Search Students", icon: Search },
+  { href: "/teacher/class-marks", label: "Class Marks", icon: BarChart3 },
+  { href: "/teacher/analytics", label: "Analytics", icon: TrendingUp },
+  { href: "/teacher/materials", label: "Study Materials", icon: FileText },
 ]
 
 const principalNavItems = [
   { href: "/principal/dashboard", label: "Dashboard", icon: Home },
-  { href: "/principal/classes", label: "Class Management", icon: School },
+  { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/principal/search-students", label: "Search Students", icon: Search },
-  { href: "/principal/reports", label: "Reports", icon: FileText },
+  { href: "/principal/analytics", label: "Analytics", icon: TrendingUp },
 ]
 
 const adminNavItems = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: Home },
   { href: "/admin/users", label: "User Management", icon: Users },
   { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/admin/search-students", label: "Search Students", icon: Search },
-  { href: "/admin/reports", label: "Reports", icon: FileText },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
 ]
 
 const studentNavItems = [
   { href: "/student/profile", label: "My Profile", icon: User },
   { href: "/student/marks", label: "My Marks", icon: Award },
+  { href: "/student/activities", label: "My Activities", icon: Trophy },
+  { href: "/student/materials", label: "Study Materials", icon: FileText },
 ]
 
 export function AppSidebar({
@@ -60,6 +67,18 @@ export function AppSidebar({
       setRole(user.role)
     }
   }, [])
+
+  const handleLinkClick = () => {
+    if (window.innerWidth < 1024) {
+      const sidebar = document.getElementById("sidebar")
+      const overlay = document.getElementById("sidebar-overlay")
+
+      if (sidebar && overlay) {
+        sidebar.classList.add("max-lg:-translate-x-full")
+        overlay.classList.add("hidden")
+      }
+    }
+  }
 
   const navItems =
     role === "admin"
@@ -88,7 +107,14 @@ export function AppSidebar({
         <div className="flex h-full flex-col">
           {/* Header */}
           <div className="flex h-16 items-center justify-between border-b px-4">
-            {!isCollapsed && <h2 className="text-lg font-semibold text-sidebar-foreground">EduProfile</h2>}
+            {isCollapsed ? (
+              <Image src="/logo.png" alt="EduProfile" width={32} height={32} className="rounded-full" />
+            ) : (
+              <Link href="/" className="flex items-center gap-2">
+                <Image src="/logo.png" alt="EduProfile" width={32} height={32} className="rounded-full" />
+                <h2 className="text-lg font-semibold text-sidebar-foreground">EduProfile</h2>
+              </Link>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -109,6 +135,7 @@ export function AppSidebar({
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={handleLinkClick}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                     isActive

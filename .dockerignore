@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+Dockerfile
+.dockerignore
+.git
+.gitignore
+.env
+.env.*.local
+dist
+.next
+apps/api/node_modules
+apps/api/dist
+apps/web/node_modules
+apps/web/.next
+uploads

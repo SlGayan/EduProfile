@@ -4,7 +4,7 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "dev": "tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js"
@@ -22,16 +22,25 @@
     "@types/express": "^5.0.3",
     "@types/node": "^24.7.2",
     "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "csv-parse": "^7.0.1",
+    "csv-parser": "^3.2.1",
     "express": "^5.1.0",
-    "prisma": "^6.17.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.9.3",
-    "zod": "^4.1.12",
+    "express-rate-limit": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
-    "express-rate-limit": "^7.0.0"
-  }
-  ,
+    "multer": "^2.2.0",
+    "prisma": "^6.17.1",
+    "typescript": "^5.9.3",
+    "zod": "^4.1.12"
+  },
   "devDependencies": {
-    "@types/jsonwebtoken": "^9.0.2"
+    "@types/cors": "^2.8.19",
+    "@types/jsonwebtoken": "^9.0.2",
+    "@types/multer": "^2.2.0",
+    "@types/supertest": "^7.2.1",
+    "form-data": "^4.0.6",
+    "supertest": "^7.2.2",
+    "tsx": "^4.23.0",
+    "vitest": "^4.1.9"
   }
 }

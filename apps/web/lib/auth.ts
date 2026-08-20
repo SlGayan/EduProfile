@@ -1,11 +1,10 @@
-export interface MockUser {
-  id: string
-  name: string
-  email: string
-  role: "teacher" | "admin" | "principal" | "student"
-}
+import { toast } from "sonner"
+import type { User } from "./types"
 
-const MOCK_USERS: MockUser[] = [
+// Re-export for backwards compat (tests import MockUser from here)
+export type { User as MockUser }
+
+const MOCK_USERS: User[] = [
   {
     id: "1",
     name: "John Doe",
@@ -32,31 +31,124 @@ const MOCK_USERS: MockUser[] = [
   },
 ]
 
-export function mockLogin(email: string): MockUser | null {
-  // Accept any password for demo purposes
+function storeUser(user: User | null) {
+  if (typeof window !== "undefined") {
+    if (user) {
+      localStorage.setItem("eduprofile_user", JSON.stringify(user))
+      // Set cookies for middleware
+      document.cookie = `eduprofile_role=${user.role}; path=/; max-age=${30 * 24 * 60 * 60}`
+      document.cookie = `eduprofile_user=${JSON.stringify(user)}; path=/; max-age=${30 * 24 * 60 * 60}`
+      document.cookie = `eduprofile_must_change_password=${!!user.mustChangePassword}; path=/; max-age=${30 * 24 * 60 * 60}`
+    } else {
+      localStorage.removeItem("eduprofile_user")
+      // Remove cookies
+      document.cookie = "eduprofile_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      document.cookie = "eduprofile_user=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      document.cookie = "eduprofile_must_change_password=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    }
+  }
+}
+export { storeUser }
+
+/**
+ * Check if a user's token has expired
+ */
+export function isTokenExpired(user: User | null): boolean {
+  if (!user || !user.tokenExpiry) return false
+  return Date.now() >= user.tokenExpiry
+}
+
+export async function login(email: string, password: string): Promise<User> {
+  // Try the real API first
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    })
+
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null)
+      const message = payload?.error || payload?.message || `Login failed (${res.status})`
+      throw new Error(message)
+    }
+
+    const data = await res.json()
+    // Expecting { user: { id, name, email, role }, tokenExpiry?: number }
+    if (!data || !data.user) throw new Error("Invalid response from server")
+
+    const user: User = {
+      ...data.user,
+      token: data.token,
+      tokenExpiry: data.tokenExpiry || Date.now() + 24 * 60 * 60 * 1000, // Default 24h expiry
+      mustChangePassword: data.user.mustChangePassword,
+    }
+    storeUser(user)
+    toast.success("Login successful")
+    return user
+  } catch (err) {
+    // On network error or missing API, fall back to mock login for demo
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e: any = err
+    if (e?.message && e.message.includes("Failed to fetch")) {
+      const user = mockLogin(email, password)
+      if (user) {
+        toast.success("Login successful (mock)")
+        return user
+      }
+    }
+
+    const errorMessage = (err as Error).message || "An unexpected error occurred during login."
+    toast.error(errorMessage)
+    throw err
+  }
+}
+
+export function mockLogin(email: string, _password?: string): User | null {
+  // Accept any password for demo purposes (password parameter kept for parity with callers)
   const user = MOCK_USERS.find((u) => u.email === email)
   if (user) {
-    // Store user in localStorage
-    if (typeof window !== "undefined") {
-      localStorage.setItem("eduprofile_user", JSON.stringify(user))
+    // Add token expiry for demo (24 hours from now)
+    const userWithExpiry: User = {
+      ...user,
+      tokenExpiry: Date.now() + 24 * 60 * 60 * 1000,
     }
-    return user
+    // Store user in localStorage
+    storeUser(userWithExpiry)
+    return userWithExpiry
   }
   return null
 }
 
 export function mockLogout(): void {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("eduprofile_user")
-  }
+  storeUser(null)
 }
 
-export function getCurrentUser(): MockUser | null {
+export function getCurrentUser(): User | null {
   if (typeof window !== "undefined") {
     const userStr = localStorage.getItem("eduprofile_user")
     if (userStr) {
       try {
-        return JSON.parse(userStr)
+        const parsed = JSON.parse(userStr)
+        // Historical defensive branch: useAuthStore's Zustand `persist` middleware
+        // used to also write to this same localStorage key, as { state: { user }, version }.
+        // That middleware has been removed (storeUser() is now the sole writer, which
+        // always writes the plain shape below), but a browser that logged in before this
+        // fix may still have that wrapped shape sitting in localStorage — unwrap it if
+        // present, otherwise assume the plain User object storeUser() writes.
+        // Checked via `"state" in parsed` (not `parsed?.state?.user ?? parsed`) because
+        // a wrapped logout would have persisted { state: { user: null }, version } — with
+        // `??`, that explicit null would fall through to the whole wrapper object instead of null.
+        const isWrapped = parsed !== null && typeof parsed === "object" && "state" in parsed
+        const user = (isWrapped ? parsed.state?.user ?? null : parsed) as User | null
+        if (!user) return null
+        // Check if token has expired
+        if (isTokenExpired(user)) {
+          // Auto-logout if expired
+          storeUser(null)
+          return null
+        }
+        return user
       } catch {
         return null
       }

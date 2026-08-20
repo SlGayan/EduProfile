@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,29 +26,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Badge } from "@/components/ui/badge"
 import { Plus, MoreHorizontal, Pencil, Trash2, Users, Filter } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { School } from "lucide-react" // Declare the School variable
+import { apiFetch } from "@/lib/apiFetch"
 
-interface Class {
-  id: string
+interface ApiClass {
+  id: number
   name: string
-  grade: string
-  year: number
-  teacherId: string | null
-  teacherName: string | null
-  studentCount: number
+  year: number | null
+  teacher: { id: number; user: { email: string } } | null
+  _count: { students: number }
 }
 
-interface Teacher {
-  id: string
-  name: string
+interface ApiUser {
+  id: number
+  email: string
+  role: string
+  teacher: { id: number } | null
 }
 
 interface ClassFormData {
   name: string
-  grade: string
   year: number
   teacherId: string
 }
@@ -55,103 +55,110 @@ interface ClassFormData {
 export default function ClassManagementPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [selectedClass, setSelectedClass] = useState<Class | null>(null)
-  const [gradeFilter, setGradeFilter] = useState<string>("all")
+  const [selectedClass, setSelectedClass] = useState<ApiClass | null>(null)
   const [yearFilter, setYearFilter] = useState<string>("all")
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState<ClassFormData>({
     name: "",
-    grade: "1", // Modify the default value prop to be a non-empty string
     year: new Date().getFullYear(),
     teacherId: "none", // Changed default teacherId from empty string to "none"
   })
 
-  // Fetch classes
-  const { data: classes = [], isLoading } = useQuery<Class[]>({
-    queryKey: ["classes", gradeFilter, yearFilter],
+  // Fetch classes — the real endpoint takes no query params, so filtering happens client-side below
+  const { data: classes = [], isLoading, isError: isClassesError } = useQuery<ApiClass[]>({
+    queryKey: ["classes"],
     queryFn: async () => {
-      const params = new URLSearchParams()
-      if (gradeFilter !== "all") params.append("grade", gradeFilter)
-      if (yearFilter !== "all") params.append("year", yearFilter)
-
-      const response = await fetch(`/api/classes?${params}`)
-      if (!response.ok) throw new Error("Failed to fetch classes")
-      return response.json()
+      const response = await apiFetch("/api/classes")
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Failed to fetch classes")
+      return data.classes
     },
   })
 
-  // Fetch teachers
-  const { data: teachers = [] } = useQuery<Teacher[]>({
-    queryKey: ["teachers"],
+  // Fetch teachers — no real /api/teachers endpoint exists yet (Epic 6 Story 6.4);
+  // reuse admin/classes/page.tsx's pattern of filtering /api/users client-side instead.
+  const { data: allUsers = [], isError: isUsersError } = useQuery<ApiUser[]>({
+    queryKey: ["users"],
     queryFn: async () => {
-      const response = await fetch("/api/teachers")
-      if (!response.ok) throw new Error("Failed to fetch teachers")
-      return response.json()
+      const response = await apiFetch("/api/users")
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Failed to fetch users")
+      return data.users
     },
   })
+  const teachers = allUsers.filter((u) => u.role === "TEACHER" && u.teacher !== null)
 
   // Create class mutation
   const createClassMutation = useMutation({
     mutationFn: async (data: ClassFormData) => {
-      const response = await fetch("/api/classes", {
+      // createClassSchema's teacherId is `.optional()` only (no `.nullable()`) —
+      // omit the key entirely rather than sending null, same as admin/classes/page.tsx.
+      const body: Record<string, unknown> = { name: data.name, year: data.year }
+      if (data.teacherId !== "none") body.teacherId = Number(data.teacherId)
+
+      const response = await apiFetch("/api/classes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          teacherId: data.teacherId === "none" ? "" : data.teacherId,
-        }),
+        body: JSON.stringify(body),
       })
-      if (!response.ok) throw new Error("Failed to create class")
-      return response.json()
+      const responseData = await response.json()
+      if (!response.ok) throw new Error(responseData.error || "Failed to create class")
+      return responseData
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["classes"] })
+      toast.success("Class created successfully")
       setIsCreateDialogOpen(false)
       resetForm()
     },
+    onError: (err: Error) => toast.error(err.message),
   })
 
   // Update class mutation
   const updateClassMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: ClassFormData }) => {
-      const response = await fetch(`/api/classes/${id}`, {
+    mutationFn: async ({ id, data }: { id: number; data: ClassFormData }) => {
+      const response = await apiFetch(`/api/classes/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
-          teacherId: data.teacherId === "none" ? "" : data.teacherId,
+          name: data.name,
+          year: data.year,
+          teacherId: data.teacherId !== "none" ? Number(data.teacherId) : null,
         }),
       })
-      if (!response.ok) throw new Error("Failed to update class")
-      return response.json()
+      const responseData = await response.json()
+      if (!response.ok) throw new Error(responseData.error || "Failed to update class")
+      return responseData
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["classes"] })
+      toast.success("Class updated successfully")
       setIsEditDialogOpen(false)
       setSelectedClass(null)
       resetForm()
     },
+    onError: (err: Error) => toast.error(err.message),
   })
 
   // Delete class mutation
   const deleteClassMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/classes/${id}`, {
+    mutationFn: async (id: number) => {
+      const response = await apiFetch(`/api/classes/${id}`, {
         method: "DELETE",
       })
-      if (!response.ok) throw new Error("Failed to delete class")
-      return response.json()
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Failed to delete class")
+      return data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["classes"] })
+      toast.success("Class deleted")
     },
+    onError: (err: Error) => toast.error(err.message),
   })
 
   const resetForm = () => {
     setFormData({
       name: "",
-      grade: "1",
       year: new Date().getFullYear(),
       teacherId: "none", // Changed default teacherId from empty string to "none"
     })
@@ -161,13 +168,22 @@ export default function ClassManagementPage() {
     createClassMutation.mutate(formData)
   }
 
-  const handleEdit = (classItem: Class) => {
+  // Guard against NaN (e.g. the field cleared mid-edit) rather than letting it
+  // serialize to `null` and either fail create's non-nullable schema or, on
+  // update, silently wipe an existing class's year.
+  const handleYearChange = (value: string) => {
+    const parsed = Number.parseInt(value, 10)
+    if (!Number.isNaN(parsed)) {
+      setFormData({ ...formData, year: parsed })
+    }
+  }
+
+  const handleEdit = (classItem: ApiClass) => {
     setSelectedClass(classItem)
     setFormData({
       name: classItem.name,
-      grade: classItem.grade,
-      year: classItem.year,
-      teacherId: classItem.teacherId || "none",
+      year: classItem.year ?? new Date().getFullYear(),
+      teacherId: classItem.teacher ? String(classItem.teacher.id) : "none",
     })
     setIsEditDialogOpen(true)
   }
@@ -178,13 +194,28 @@ export default function ClassManagementPage() {
     }
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: number) => {
     if (confirm("Are you sure you want to delete this class?")) {
       deleteClassMutation.mutate(id)
     }
   }
 
-  const filteredClasses = classes
+  // Reset regardless of how the dialog closes (Cancel, X, Escape, overlay click) —
+  // and on open too, so leftover data from a cancelled Edit can't leak into Create.
+  const handleCreateDialogChange = (open: boolean) => {
+    resetForm()
+    setIsCreateDialogOpen(open)
+  }
+
+  const handleEditDialogChange = (open: boolean) => {
+    setIsEditDialogOpen(open)
+    if (!open) {
+      resetForm()
+      setSelectedClass(null)
+    }
+  }
+
+  const filteredClasses = yearFilter === "all" ? classes : classes.filter((c) => String(c.year) === yearFilter)
 
   return (
     <div className="space-y-6">
@@ -193,7 +224,7 @@ export default function ClassManagementPage() {
           <h1 className="text-3xl font-bold tracking-tight">Class Management</h1>
           <p className="text-muted-foreground">Manage classes, assign teachers, and organize student rosters</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogChange}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
@@ -216,27 +247,12 @@ export default function ClassManagementPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="grade">Grade</Label>
-                <Select value={formData.grade} onValueChange={(value) => setFormData({ ...formData, grade: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select grade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 13 }, (_, i) => i + 1).map((grade) => (
-                      <SelectItem key={grade} value={grade.toString()}>
-                        Grade {grade}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="year">Academic Year</Label>
                 <Input
                   id="year"
                   type="number"
                   value={formData.year}
-                  onChange={(e) => setFormData({ ...formData, year: Number.parseInt(e.target.value) })}
+                  onChange={(e) => handleYearChange(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -251,8 +267,8 @@ export default function ClassManagementPage() {
                   <SelectContent>
                     <SelectItem value="none">No teacher assigned</SelectItem>
                     {teachers.map((teacher) => (
-                      <SelectItem key={teacher.id} value={teacher.id}>
-                        {teacher.name}
+                      <SelectItem key={teacher.id} value={String(teacher.teacher!.id)}>
+                        {teacher.email}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -260,7 +276,7 @@ export default function ClassManagementPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              <Button variant="outline" onClick={() => handleCreateDialogChange(false)}>
                 Cancel
               </Button>
               <Button onClick={handleCreate} disabled={createClassMutation.isPending}>
@@ -270,6 +286,18 @@ export default function ClassManagementPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Error banners */}
+      {isClassesError && (
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Failed to load classes. Make sure the API is running and you are logged in.
+        </p>
+      )}
+      {isUsersError && (
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Failed to load teachers — the teacher-assignment dropdown may be incomplete.
+        </p>
+      )}
 
       {/* Filters */}
       <Card>
@@ -281,22 +309,6 @@ export default function ClassManagementPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4 md:flex-row">
-            <div className="flex-1 space-y-2">
-              <Label>Grade</Label>
-              <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Grades</SelectItem>
-                  {Array.from({ length: 13 }, (_, i) => i + 1).map((grade) => (
-                    <SelectItem key={grade} value={grade.toString()}>
-                      Grade {grade}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="flex-1 space-y-2">
               <Label>Academic Year</Label>
               <Select value={yearFilter} onValueChange={setYearFilter}>
@@ -344,7 +356,6 @@ export default function ClassManagementPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Class Name</TableHead>
-                    <TableHead>Grade</TableHead>
                     <TableHead>Year</TableHead>
                     <TableHead>Teacher</TableHead>
                     <TableHead>Students</TableHead>
@@ -355,13 +366,10 @@ export default function ClassManagementPage() {
                   {filteredClasses.map((classItem) => (
                     <TableRow key={classItem.id}>
                       <TableCell className="font-medium">{classItem.name}</TableCell>
+                      <TableCell>{classItem.year ?? "N/A"}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">Grade {classItem.grade}</Badge>
-                      </TableCell>
-                      <TableCell>{classItem.year}</TableCell>
-                      <TableCell>
-                        {classItem.teacherName ? (
-                          classItem.teacherName
+                        {classItem.teacher ? (
+                          classItem.teacher.user.email
                         ) : (
                           <span className="text-muted-foreground">Not assigned</span>
                         )}
@@ -369,7 +377,7 @@ export default function ClassManagementPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-muted-foreground" />
-                          {classItem.studentCount}
+                          {classItem._count.students}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -410,7 +418,7 @@ export default function ClassManagementPage() {
       </Card>
 
       {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Class</DialogTitle>
@@ -426,27 +434,12 @@ export default function ClassManagementPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-grade">Grade</Label>
-              <Select value={formData.grade} onValueChange={(value) => setFormData({ ...formData, grade: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 13 }, (_, i) => i + 1).map((grade) => (
-                    <SelectItem key={grade} value={grade.toString()}>
-                      Grade {grade}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="edit-year">Academic Year</Label>
               <Input
                 id="edit-year"
                 type="number"
                 value={formData.year}
-                onChange={(e) => setFormData({ ...formData, year: Number.parseInt(e.target.value) })}
+                onChange={(e) => handleYearChange(e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -461,8 +454,8 @@ export default function ClassManagementPage() {
                 <SelectContent>
                   <SelectItem value="none">No teacher assigned</SelectItem>
                   {teachers.map((teacher) => (
-                    <SelectItem key={teacher.id} value={teacher.id}>
-                      {teacher.name}
+                    <SelectItem key={teacher.id} value={String(teacher.teacher!.id)}>
+                      {teacher.email}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -470,7 +463,7 @@ export default function ClassManagementPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            <Button variant="outline" onClick={() => handleEditDialogChange(false)}>
               Cancel
             </Button>
             <Button onClick={handleUpdate} disabled={updateClassMutation.isPending}>

@@ -12,20 +12,22 @@ import {
 import { Button } from "@/components/ui/button"
 import { Menu } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { getCurrentUser, mockLogout } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
+import { useAuthStore } from "@/lib/useAuthStore"
 import { useEffect, useState } from "react"
 import type { MockUser } from "@/lib/auth"
 
 export function AppHeader() {
   const [user, setUser] = useState<MockUser | null>(null)
   const router = useRouter()
+  const clearUser = useAuthStore((s) => s.clearUser)
 
   useEffect(() => {
     setUser(getCurrentUser())
   }, [])
 
   const handleLogout = () => {
-    mockLogout()
+    clearUser()
     router.push("/login")
   }
 
@@ -48,17 +50,18 @@ export function AppHeader() {
       <div className="ml-auto flex items-center gap-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+            <Button variant="ghost" className="relative h-10 pr-2 pl-1 rounded-full flex items-center gap-2">
               <Avatar>
-                <AvatarImage src="/abstract-geometric-shapes.png" alt="User" />
+                <AvatarImage src="/placeholder-user.jpg" alt="User" />
                 <AvatarFallback>
                   {user?.name
-                    .split(" ")
+                    ?.split(" ")
                     .map((n) => n[0])
                     .join("")
                     .toUpperCase() || "U"}
                 </AvatarFallback>
               </Avatar>
+              <span className="hidden sm:inline text-sm">{user?.email}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

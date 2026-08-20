@@ -4,24 +4,40 @@ import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Info } from "lucide-react"
+import { apiFetch } from "@/lib/apiFetch"
 
 interface StudentProfile {
-  id: string
+  id: number
   fullName: string
-  studentId: string
+  indexNumber: string
   dateOfBirth: string
-  nicNumber: string
+  nicNumber: string | null
   address: string
-  assignedClass: string
+  olYear: number | null
+  alYear: number | null
+  assignedClass: string | null
   email: string
-  phoneNumber: string
+}
+
+class ProfileFetchError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
 }
 
 async function fetchStudentProfile(): Promise<StudentProfile> {
-  const response = await fetch("/api/students/me")
+  const response = await apiFetch("/api/students/me")
   if (!response.ok) {
-    throw new Error("Failed to fetch profile")
+    const data: unknown = await response.json().catch(() => null)
+    const message =
+      data && typeof data === "object" && typeof (data as { error?: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : "Failed to fetch profile"
+    throw new ProfileFetchError(message, response.status)
   }
   return response.json()
 }
@@ -59,6 +75,22 @@ export default function StudentProfilePage() {
   }
 
   if (error) {
+    const isNoProfileError = error instanceof ProfileFetchError && error.status === 404
+
+    if (isNoProfileError) {
+      return (
+        <div className="space-y-6">
+          <h1 className="text-balance text-3xl font-bold tracking-tight">My Profile</h1>
+          <Alert variant="destructive">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Your student profile has not been set up yet. Please contact your administrator to complete your registration.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )
+    }
+
     return (
       <div className="space-y-6">
         <h1 className="text-balance text-3xl font-bold tracking-tight">My Profile</h1>
@@ -86,8 +118,8 @@ export default function StudentProfilePage() {
               <dd className="text-base font-medium">{profile?.fullName}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-sm font-medium text-muted-foreground">Student ID</dt>
-              <dd className="text-base font-medium">{profile?.studentId}</dd>
+              <dt className="text-sm font-medium text-muted-foreground">Index Number</dt>
+              <dd className="text-base font-medium">{profile?.indexNumber}</dd>
             </div>
             <div className="space-y-1">
               <dt className="text-sm font-medium text-muted-foreground">Date of Birth</dt>
@@ -102,12 +134,16 @@ export default function StudentProfilePage() {
               <dd className="text-base font-medium">{profile?.email}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-sm font-medium text-muted-foreground">Phone Number</dt>
-              <dd className="text-base font-medium">{profile?.phoneNumber}</dd>
+              <dt className="text-sm font-medium text-muted-foreground">O/L Year</dt>
+              <dd className="text-base font-medium">{profile?.olYear ?? "N/A"}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-sm font-medium text-muted-foreground">A/L Year</dt>
+              <dd className="text-base font-medium">{profile?.alYear ?? "N/A"}</dd>
             </div>
             <div className="space-y-1">
               <dt className="text-sm font-medium text-muted-foreground">Assigned Class</dt>
-              <dd className="text-base font-medium">{profile?.assignedClass}</dd>
+              <dd className="text-base font-medium">{profile?.assignedClass ?? "N/A"}</dd>
             </div>
             <div className="space-y-1 sm:col-span-2">
               <dt className="text-sm font-medium text-muted-foreground">Address</dt>

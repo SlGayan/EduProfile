@@ -1,8 +1,8 @@
 export enum UserRole {
-  STUDENT = "STUDENT",
-  TEACHER = "TEACHER",
-  PRINCIPAL = "PRINCIPAL",
-  ADMINISTRATOR = "ADMINISTRATOR",
+  STUDENT = "student",
+  TEACHER = "teacher",
+  PRINCIPAL = "principal",
+  ADMINISTRATOR = "admin",
 }
 
 export enum Permission {
@@ -19,11 +19,13 @@ export enum Permission {
   SYSTEM_SETTINGS = "SYSTEM_SETTINGS",
 }
 
+/** Canonical user type used throughout the app */
 export interface User {
-  id: number
+  id: string
   name: string
   email: string
-  role: UserRole
-  status: "Active" | "Inactive"
-  permissions?: Permission[]
+  role: "admin" | "principal" | "teacher" | "student"
+  tokenExpiry?: number // Unix timestamp in milliseconds
+  token?: string // JWT for API calls
+  mustChangePassword?: boolean
 }
