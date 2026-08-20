@@ -82,10 +82,17 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-md" aria-live="polite">
+    <Card className="w-full max-w-md sm:p-6" aria-live="polite">
       <CardHeader className="justify-items-center gap-2">
-        <Image src="/logo.png" alt="EduProfile" width={72} height={72} priority />
-        <CardTitle className="text-2xl text-center">EduProfile Login</CardTitle>
+        <Image
+          src="/logo.png"
+          alt="EduProfile"
+          width={72}
+          height={72}
+          priority
+          className="w-16 h-16 sm:w-20 sm:h-20"
+        />
+        <CardTitle className="text-2xl text-center sm:text-3xl">EduProfile Login</CardTitle>
       </CardHeader>
 
       <form onSubmit={handleSubmit(onSubmit)} aria-describedby="login-error">
@@ -138,22 +145,32 @@ export default function LoginPage() {
           </div>
 
           <div className="text-sm text-muted-foreground">
-            <div className="grid">
-              <p>Teacher: teacher@edu.com</p>
-              <p>Principal: principal@edu.com</p>
-              <p>Admin: admin@edu.com</p>
-              <p>Student: student@edu.com</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+              <p>
+                <strong>Teacher:</strong> teacher@edu.com
+              </p>
+              <p>
+                <strong>Principal:</strong> principal@edu.com
+              </p>
+              <p>
+                <strong>Admin:</strong> admin@edu.com
+              </p>
+              <p>
+                <strong>Student:</strong> student@edu.com
+              </p>
             </div>
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col space-y-4">
+        <CardFooter className="flex flex-col space-y-4 sm:gap-4">
           <Button type="submit" className="w-full" disabled={isSubmitting} aria-busy={isSubmitting}>
             {isSubmitting ? "Signing in..." : "Log in"}
           </Button>
           <div className="text-sm text-center text-muted-foreground w-full">
-            Don't have an account?{" "}
-            <Link href="/register" className="text-primary hover:underline font-medium">Sign up</Link>
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="text-primary hover:underline font-medium">
+              Sign up
+            </Link>
           </div>
         </CardFooter>
       </form>
