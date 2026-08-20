@@ -33,9 +33,9 @@ export default function PrincipalDashboardPage() {
   const totals = analytics?.totals
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-balance text-3xl font-bold tracking-tight">Principal Dashboard</h1>
+        <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">Principal Dashboard</h1>
         <p className="text-muted-foreground">Welcome back! Here's an overview of your school.</p>
       </div>
 
