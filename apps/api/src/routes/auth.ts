@@ -16,8 +16,8 @@ const loginSchema = z.object({
 
 // Basic rate limiter to mitigate brute force attacks
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 requests per windowMs
+  windowMs: 3 * 60 * 1000, // 5 minutes
+  max: 20, // limit each IP to 20 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts. Please try again later.' },
