@@ -38,6 +38,14 @@ async function main() {
 
   console.log('🌱 Starting massive database seeding...');
 
+  // Guard: skip seeding if the database already has users (production safety).
+  // Remove this block if you want to force a full reseed.
+  const existingUsers = await prisma.user.count();
+  if (existingUsers > 0) {
+    console.log(`⏭️  Database already has ${existingUsers} users — skipping seed to preserve production data.`);
+    return;
+  }
+
   // 0. Clean up existing data for fresh seed (Optional but good for analytics)
   console.log('Clearing existing marks, activities, materials, and classes...');
   await prisma.termMark.deleteMany({});
