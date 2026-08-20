@@ -83,16 +83,23 @@ export default function SetNewPasswordPage() {
   }
 
   return (
-    <Card className="w-full max-w-md" aria-live="polite">
+    <Card className="w-full max-w-md sm:p-6" aria-live="polite">
       <CardHeader className="justify-items-center gap-2">
-        <Image src="/logo.png" alt="EduProfile" width={72} height={72} priority />
-        <CardTitle className="text-2xl text-center">Set a New Password</CardTitle>
+        <Image
+          src="/logo.png"
+          alt="EduProfile"
+          width={72}
+          height={72}
+          priority
+          className="w-16 h-16 sm:w-20 sm:h-20"
+        />
+        <CardTitle className="text-2xl text-center sm:text-3xl">Set a New Password</CardTitle>
       </CardHeader>
 
       <form onSubmit={handleSubmit(onSubmit)} aria-describedby="set-new-password-error">
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            For your account's security, you must set a new password before continuing.
+            For your account&apos;s security, you must set a new password before continuing.
           </p>
 
           <div className="space-y-2">
@@ -143,7 +150,7 @@ export default function SetNewPasswordPage() {
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col space-y-4">
+        <CardFooter className="flex flex-col space-y-4 sm:gap-4">
           <Button type="submit" className="w-full" disabled={isSubmitting} aria-busy={isSubmitting}>
             {isSubmitting ? "Updating..." : "Set new password"}
           </Button>
