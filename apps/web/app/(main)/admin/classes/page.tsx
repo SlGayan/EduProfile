@@ -238,7 +238,7 @@ function RosterModal({
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-full sm:max-w-2xl mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <DialogHeader>
             <DialogTitle>Manage Roster — {classItem?.name}</DialogTitle>
             <DialogDescription>
@@ -501,11 +501,11 @@ export default function ClassManagementPage() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Class Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Class Management</h1>
           <p className="text-muted-foreground">
             Create classes, assign teachers, and manage student rosters.
           </p>
@@ -545,7 +545,7 @@ export default function ClassManagementPage() {
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border bg-card">
+        <div className="rounded-lg border bg-card overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -613,7 +613,7 @@ export default function ClassManagementPage() {
 
       {/* Create Class dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-full sm:max-w-md mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <DialogHeader>
             <DialogTitle>Create Class</DialogTitle>
             <DialogDescription>Add a new class to the school.</DialogDescription>
@@ -673,7 +673,7 @@ export default function ClassManagementPage() {
 
       {/* Edit Class dialog */}
       <Dialog open={!!editClass} onOpenChange={(o) => { if (!o) setEditClass(null) }}>
-        <DialogContent>
+        <DialogContent className="max-w-full sm:max-w-md mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <DialogHeader>
             <DialogTitle>Edit Class</DialogTitle>
             <DialogDescription>Update details for {editClass?.name}.</DialogDescription>
@@ -736,7 +736,7 @@ export default function ClassManagementPage() {
         open={!!deleteClass}
         onOpenChange={(o) => { if (!o) setDeleteClass(null) }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-full sm:max-w-lg mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Class</AlertDialogTitle>
             <AlertDialogDescription>

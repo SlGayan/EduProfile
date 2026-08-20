@@ -218,10 +218,10 @@ export default function ClassManagementPage() {
   const filteredClasses = yearFilter === "all" ? classes : classes.filter((c) => String(c.year) === yearFilter)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Class Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Class Management</h1>
           <p className="text-muted-foreground">Manage classes, assign teachers, and organize student rosters</p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogChange}>
@@ -231,7 +231,7 @@ export default function ClassManagementPage() {
               Create Class
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-full sm:max-w-md mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
             <DialogHeader>
               <DialogTitle>Create New Class</DialogTitle>
               <DialogDescription>Add a new class to the school system</DialogDescription>
@@ -312,7 +312,7 @@ export default function ClassManagementPage() {
             <div className="flex-1 space-y-2">
               <Label>Academic Year</Label>
               <Select value={yearFilter} onValueChange={setYearFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -419,7 +419,7 @@ export default function ClassManagementPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogChange}>
-        <DialogContent>
+        <DialogContent className="max-w-full sm:max-w-md mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <DialogHeader>
             <DialogTitle>Edit Class</DialogTitle>
             <DialogDescription>Update class information</DialogDescription>
