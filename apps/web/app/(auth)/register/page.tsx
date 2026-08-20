@@ -91,10 +91,17 @@ export default function RegisterPage() {
   }
 
   return (
-    <Card className="w-full max-w-md shadow-lg border-2">
+    <Card className="w-full max-w-md shadow-lg border-2 sm:p-6">
       <CardHeader className="justify-items-center gap-2">
-        <Image src="/logo.png" alt="EduProfile" width={72} height={72} priority />
-        <CardTitle className="text-2xl font-bold tracking-tight text-center">EduProfile Create an Account</CardTitle>
+        <Image
+          src="/logo.png"
+          alt="EduProfile"
+          width={72}
+          height={72}
+          priority
+          className="w-16 h-16 sm:w-20 sm:h-20"
+        />
+        <CardTitle className="text-2xl font-bold tracking-tight text-center sm:text-3xl">EduProfile Create an Account</CardTitle>
         <CardDescription className="text-center">Enter your details to register</CardDescription>
       </CardHeader>
 
@@ -185,7 +192,7 @@ export default function RegisterPage() {
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col space-y-4 py-2">
+        <CardFooter className="flex flex-col space-y-4 py-2 sm:gap-4">
           <Button type="submit" className="w-full" disabled={isSubmitting} aria-busy={isSubmitting}>
             {isSubmitting ? "Creating account..." : "Sign Up"}
           </Button>
