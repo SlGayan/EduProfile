@@ -90,8 +90,8 @@ export default function TeacherClassMarksPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-balance text-3xl font-bold tracking-tight">Class Marks</h1>
+    <div className="space-y-6 p-4 sm:p-6">
+      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">Class Marks</h1>
 
       <Card>
         <CardHeader>
@@ -101,11 +101,11 @@ export default function TeacherClassMarksPage() {
         <CardContent>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-2">
-              <label htmlFor="term" className="text-sm font-medium">
+              <label htmlFor="term" className="mb-1 block text-sm font-medium">
                 Term
               </label>
               <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                <SelectTrigger id="term">
+                <SelectTrigger id="term" className="w-full">
                   <SelectValue placeholder="All Terms" />
                 </SelectTrigger>
                 <SelectContent>
@@ -120,11 +120,11 @@ export default function TeacherClassMarksPage() {
             </div>
 
             <div className="flex-1 space-y-2">
-              <label htmlFor="subject" className="text-sm font-medium">
+              <label htmlFor="subject" className="mb-1 block text-sm font-medium">
                 Subject
               </label>
               <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                <SelectTrigger id="subject">
+                <SelectTrigger id="subject" className="w-full">
                   <SelectValue placeholder="All Subjects" />
                 </SelectTrigger>
                 <SelectContent>
@@ -144,6 +144,7 @@ export default function TeacherClassMarksPage() {
                 setSelectedTerm("")
                 setSelectedSubject("")
               }}
+              className="w-full sm:w-auto"
             >
               Reset Filters
             </Button>
