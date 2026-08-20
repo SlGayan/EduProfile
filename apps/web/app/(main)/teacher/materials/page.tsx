@@ -27,7 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, Trash2, Upload, FileText } from "lucide-react"
+import { Loader2, Trash2, Upload, FileText, Download } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { getCurrentUser } from "@/lib/auth"
 import {
@@ -414,15 +414,49 @@ export default function TeacherMaterialsPage() {
                       <TableCell>{m.fileType}</TableCell>
                       <TableCell>{new Date(m.createdAt).toLocaleDateString()}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setDeleteTarget(m)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Delete {m.title}</span>
-                        </Button>
+                        <div className="flex items-center gap-2 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={async () => {
+                              try {
+                                const res = await apiFetch(`/api/materials/${m.id}/download`)
+                                if (!res.ok) throw new Error("Download failed")
+                                
+                                const blob = await res.blob()
+                                const url = window.URL.createObjectURL(blob)
+                                const a = document.createElement("a")
+                                a.href = url
+                                
+                                const contentDisposition = res.headers.get("Content-Disposition")
+                                let filename = `${m.title}`
+                                if (contentDisposition) {
+                                  const match = contentDisposition.match(/filename="?([^"]+)"?/)
+                                  if (match && match[1]) filename = match[1]
+                                }
+                                a.download = filename
+                                document.body.appendChild(a)
+                                a.click()
+                                window.URL.revokeObjectURL(url)
+                                document.body.removeChild(a)
+                              } catch (err) {
+                                toast.error("Failed to download material")
+                              }
+                            }}
+                          >
+                            <Download className="h-4 w-4 text-muted-foreground" />
+                            <span className="sr-only">Download {m.title}</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDeleteTarget(m)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete {m.title}</span>
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
