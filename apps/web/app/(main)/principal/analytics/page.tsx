@@ -150,8 +150,8 @@ export default function PrincipalAnalyticsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-balance text-3xl font-bold tracking-tight">School Analytics</h1>
+    <div className="space-y-6 p-4 sm:p-6">
+      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">School Analytics</h1>
 
       <Card>
         <CardHeader>
@@ -161,8 +161,8 @@ export default function PrincipalAnalyticsPage() {
             no grade field.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-4">
-          <div className="min-w-48">
+        <CardContent className="flex flex-col sm:flex-row sm:items-end gap-4">
+          <div className="w-full sm:w-auto sm:min-w-48">
             <label className="mb-1 block text-sm font-medium" htmlFor="school-class">
               Class
             </label>
@@ -188,7 +188,7 @@ export default function PrincipalAnalyticsPage() {
             ) : null}
           </div>
 
-          <div className="min-w-32">
+          <div className="w-full sm:w-auto sm:min-w-32">
             <label className="mb-1 block text-sm font-medium" htmlFor="school-year">
               Year
             </label>
@@ -208,7 +208,7 @@ export default function PrincipalAnalyticsPage() {
           </div>
 
           {/* Sits with the filters it exports — the scope above IS the report. */}
-          <div className="ml-auto self-end">
+          <div className="w-full sm:w-auto sm:ml-auto self-end flex flex-col items-center sm:items-end">
             <Button
               onClick={handleExport}
               disabled={exporting || exportBlockedReason !== null}
@@ -218,6 +218,7 @@ export default function PrincipalAnalyticsPage() {
               // visible copy below, referenced here instead.
               aria-describedby={exportBlockedReason ? "export-blocked-reason" : undefined}
               data-testid="export-report"
+              className="w-full sm:w-auto"
             >
               {exporting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -233,7 +234,7 @@ export default function PrincipalAnalyticsPage() {
             {exportBlockedReason ? (
               <p
                 id="export-blocked-reason"
-                className="mt-1 max-w-56 text-sm text-muted-foreground"
+                className="mt-1 max-w-56 text-sm text-muted-foreground text-center sm:text-right"
                 data-testid="export-blocked-reason"
               >
                 {exportBlockedReason}
