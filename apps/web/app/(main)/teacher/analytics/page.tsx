@@ -155,21 +155,21 @@ export default function TeacherAnalyticsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-balance text-3xl font-bold tracking-tight">Analytics</h1>
+    <div className="space-y-6 p-4 sm:p-6">
+      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">Analytics</h1>
 
       <Card>
         <CardHeader>
           <CardTitle>Scope</CardTitle>
           <CardDescription>Choose a class, and optionally narrow to one year or term</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-4">
-          <div className="min-w-48">
+        <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
+          <div className="w-full sm:w-auto sm:min-w-48">
             <label className="mb-1 block text-sm font-medium" htmlFor="analytics-class">
               Class
             </label>
             <Select value={selectedClassId} onValueChange={setClassId}>
-              <SelectTrigger id="analytics-class">
+              <SelectTrigger id="analytics-class" className="w-full">
                 <SelectValue placeholder="Select class" />
               </SelectTrigger>
               <SelectContent>
@@ -182,12 +182,12 @@ export default function TeacherAnalyticsPage() {
             </Select>
           </div>
 
-          <div className="min-w-32">
+          <div className="w-full sm:w-auto sm:min-w-32">
             <label className="mb-1 block text-sm font-medium" htmlFor="analytics-year">
               Year
             </label>
             <Select value={year} onValueChange={setYear}>
-              <SelectTrigger id="analytics-year">
+              <SelectTrigger id="analytics-year" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -201,12 +201,12 @@ export default function TeacherAnalyticsPage() {
             </Select>
           </div>
 
-          <div className="min-w-32">
+          <div className="w-full sm:w-auto sm:min-w-32">
             <label className="mb-1 block text-sm font-medium" htmlFor="analytics-term">
               Term
             </label>
             <Select value={term} onValueChange={setTerm}>
-              <SelectTrigger id="analytics-term">
+              <SelectTrigger id="analytics-term" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -298,7 +298,7 @@ export default function TeacherAnalyticsPage() {
                 </p>
               ) : (
                 <>
-                  <div className="min-w-56 max-w-sm">
+                  <div className="w-full sm:min-w-56 sm:max-w-sm">
                     <label className="mb-1 block text-sm font-medium" htmlFor="analytics-student">
                       Student
                     </label>
@@ -306,7 +306,7 @@ export default function TeacherAnalyticsPage() {
                         would leave the trigger blank while the chart below
                         rendered somebody else. */}
                     <Select value={selectedStudentValue} onValueChange={setStudentId}>
-                      <SelectTrigger id="analytics-student">
+                      <SelectTrigger id="analytics-student" className="w-full">
                         <SelectValue placeholder="Select student" />
                       </SelectTrigger>
                       <SelectContent>
