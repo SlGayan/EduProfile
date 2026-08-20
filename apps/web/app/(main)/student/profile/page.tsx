@@ -54,7 +54,7 @@ export default function StudentProfilePage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         <Skeleton className="h-10 w-48" />
         <Card>
           <CardHeader>
@@ -79,8 +79,8 @@ export default function StudentProfilePage() {
 
     if (isNoProfileError) {
       return (
-        <div className="space-y-6">
-          <h1 className="text-balance text-3xl font-bold tracking-tight">My Profile</h1>
+        <div className="space-y-6 p-4 sm:p-6">
+          <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">My Profile</h1>
           <Alert variant="destructive">
             <Info className="h-4 w-4" />
             <AlertDescription>
@@ -92,8 +92,8 @@ export default function StudentProfilePage() {
     }
 
     return (
-      <div className="space-y-6">
-        <h1 className="text-balance text-3xl font-bold tracking-tight">My Profile</h1>
+      <div className="space-y-6 p-4 sm:p-6">
+        <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">My Profile</h1>
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>Failed to load profile information. Please try again later.</AlertDescription>
@@ -103,8 +103,8 @@ export default function StudentProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-balance text-3xl font-bold tracking-tight">My Profile</h1>
+    <div className="space-y-6 p-4 sm:p-6">
+      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">My Profile</h1>
 
       <Card>
         <CardHeader>
