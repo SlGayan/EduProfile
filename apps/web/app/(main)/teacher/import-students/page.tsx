@@ -127,13 +127,13 @@ export default function ImportStudentsPage() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Import Student Data</h1>
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Import Student Data</h1>
         <p className="text-muted-foreground">Bulk import student information using a CSV file.</p>
       </div>
 
-      <Card className="max-w-2xl">
+      <Card className="w-full max-w-2xl">
         <CardHeader>
           <CardTitle>Upload Student Data</CardTitle>
         </CardHeader>
@@ -145,7 +145,7 @@ export default function ImportStudentsPage() {
               </span>
               <div className="space-y-2">
                 <p className="font-medium">Download the template</p>
-                <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                <Button variant="outline" size="sm" onClick={downloadTemplate} className="w-full sm:w-auto">
                   <Download className="mr-2 h-4 w-4" />
                   Download CSV Template
                 </Button>
@@ -172,7 +172,7 @@ export default function ImportStudentsPage() {
                       id="file-upload"
                       type="file"
                       accept=".csv"
-                      className="cursor-pointer"
+                      className="cursor-pointer w-full"
                       onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                     />
                   </div>
