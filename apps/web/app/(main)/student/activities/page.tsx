@@ -45,8 +45,8 @@ export default function StudentActivitiesPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-balance text-3xl font-bold tracking-tight">My Activities</h1>
+    <div className="space-y-6 p-4 sm:p-6">
+      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">My Activities</h1>
 
       <Card>
         <CardHeader>
