@@ -156,3 +156,11 @@ jobs:
         run: cd apps/api && npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Seed database
+        # Runs prisma db seed (calls prisma/seed.ts via tsx).
+        # The seed script must be idempotent (use upsert, not create)
+        # so re-running on every deploy does not duplicate data.
+        run: cd apps/api && npx prisma db seed
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
