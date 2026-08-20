@@ -74,8 +74,8 @@ export default function StudentMarksPage() {
   const groupedMarks = marks ? groupMarks(marks) : []
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-balance text-3xl font-bold tracking-tight">My Marks</h1>
+    <div className="space-y-6 p-4 sm:p-6">
+      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">My Marks</h1>
 
       <Card>
         <CardHeader>
@@ -85,11 +85,11 @@ export default function StudentMarksPage() {
         <CardContent>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-2">
-              <label htmlFor="year" className="text-sm font-medium">
+              <label htmlFor="year" className="mb-1 block text-sm font-medium">
                 Year
               </label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger id="year">
+                <SelectTrigger id="year" className="w-full">
                   <SelectValue placeholder="All Years" />
                 </SelectTrigger>
                 <SelectContent>
@@ -104,11 +104,11 @@ export default function StudentMarksPage() {
             </div>
 
             <div className="flex-1 space-y-2">
-              <label htmlFor="term" className="text-sm font-medium">
+              <label htmlFor="term" className="mb-1 block text-sm font-medium">
                 Term
               </label>
               <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                <SelectTrigger id="term">
+                <SelectTrigger id="term" className="w-full">
                   <SelectValue placeholder="All Terms" />
                 </SelectTrigger>
                 <SelectContent>
@@ -128,6 +128,7 @@ export default function StudentMarksPage() {
                 setSelectedYear("")
                 setSelectedTerm("")
               }}
+              className="w-full sm:w-auto"
             >
               Reset Filters
             </Button>

@@ -86,8 +86,8 @@ export default function StudentMaterialsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-balance text-3xl font-bold tracking-tight">My Study Materials</h1>
+    <div className="space-y-6 p-4 sm:p-6">
+      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">My Study Materials</h1>
 
       {isLoading ? (
         <div className="space-y-3">

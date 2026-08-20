@@ -251,10 +251,10 @@ export default function UserManagementPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">User Management</h1>
           <p className="text-muted-foreground">Manage users and roles in the system.</p>
         </div>
         <Button onClick={() => { createForm.reset(); setCreateOpen(true) }}>
@@ -282,19 +282,19 @@ export default function UserManagementPage() {
           </TabsList>
 
           <TabsContent value="teachers">
-            <div className="rounded-lg border bg-card">
+            <div className="rounded-lg border bg-card overflow-x-auto">
               <UserTable users={teachers} onEdit={openEdit} onDeactivate={setDeactivateUser} />
             </div>
           </TabsContent>
 
           <TabsContent value="principals">
-            <div className="rounded-lg border bg-card">
+            <div className="rounded-lg border bg-card overflow-x-auto">
               <UserTable users={principals} onEdit={openEdit} onDeactivate={setDeactivateUser} />
             </div>
           </TabsContent>
 
           <TabsContent value="students">
-            <div className="rounded-lg border bg-card">
+            <div className="rounded-lg border bg-card overflow-x-auto">
               <UserTable users={students} onEdit={openEdit} onDeactivate={setDeactivateUser} />
             </div>
           </TabsContent>
@@ -303,7 +303,7 @@ export default function UserManagementPage() {
 
       {/* Create User Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-full sm:max-w-md mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <DialogHeader>
             <DialogTitle>Create User</DialogTitle>
             <DialogDescription>Add a new user to the system.</DialogDescription>
@@ -356,7 +356,7 @@ export default function UserManagementPage() {
 
       {/* Edit User Dialog */}
       <Dialog open={!!editUser} onOpenChange={(open) => { if (!open) setEditUser(null) }}>
-        <DialogContent>
+        <DialogContent className="max-w-full sm:max-w-md mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>Update details for {editUser?.email}.</DialogDescription>
@@ -409,7 +409,7 @@ export default function UserManagementPage() {
 
       {/* Deactivate Confirmation */}
       <AlertDialog open={!!deactivateUser} onOpenChange={(open) => { if (!open) setDeactivateUser(null) }}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-full sm:max-w-lg mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <AlertDialogHeader>
             <AlertDialogTitle>Deactivate User</AlertDialogTitle>
             <AlertDialogDescription>

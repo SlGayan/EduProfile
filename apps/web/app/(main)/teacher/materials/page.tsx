@@ -258,13 +258,13 @@ export default function TeacherMaterialsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Study Materials</h1>
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Study Materials</h1>
         <p className="text-muted-foreground">Upload and manage study materials for your classes and subjects.</p>
       </div>
 
-      <Card className="max-w-2xl">
+      <Card className="w-full max-w-2xl">
         <CardHeader>
           <CardTitle>Upload a Material</CardTitle>
         </CardHeader>
@@ -275,7 +275,7 @@ export default function TeacherMaterialsPage() {
           >
             <div>
               <Label htmlFor="material-title">Title</Label>
-              <Input id="material-title" {...form.register("title")} />
+              <Input id="material-title" {...form.register("title")} className="w-full" />
               {form.formState.errors.title && (
                 <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
               )}
@@ -283,7 +283,7 @@ export default function TeacherMaterialsPage() {
 
             <div>
               <Label htmlFor="material-description">Description (optional)</Label>
-              <Textarea id="material-description" {...form.register("description")} />
+              <Textarea id="material-description" {...form.register("description")} className="w-full" />
               {form.formState.errors.description && (
                 <p className="text-xs text-destructive mt-1">{form.formState.errors.description.message}</p>
               )}
@@ -296,7 +296,7 @@ export default function TeacherMaterialsPage() {
                   <p className="text-xs text-destructive">Failed to load classes.</p>
                 ) : (
                   <Select value={classId} onValueChange={setClassId} disabled={classesLoading}>
-                    <SelectTrigger id="material-class">
+                    <SelectTrigger id="material-class" className="w-full">
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
                     <SelectContent>
@@ -316,7 +316,7 @@ export default function TeacherMaterialsPage() {
                   <p className="text-xs text-destructive">Failed to load subjects.</p>
                 ) : (
                   <Select value={subjectId} onValueChange={setSubjectId} disabled={subjectsLoading}>
-                    <SelectTrigger id="material-subject">
+                    <SelectTrigger id="material-subject" className="w-full">
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
                     <SelectContent>
@@ -341,7 +341,7 @@ export default function TeacherMaterialsPage() {
                 id="material-file"
                 type="file"
                 accept={ALLOWED_MATERIAL_MIME_TYPES.join(",")}
-                className="cursor-pointer"
+                className="cursor-pointer w-full"
                 onChange={handleFileChange}
               />
               {file && !fileError && (
@@ -362,7 +362,7 @@ export default function TeacherMaterialsPage() {
               </div>
             )}
 
-            <Button type="submit" disabled={!canSubmit}>
+            <Button type="submit" disabled={!canSubmit} className="w-full">
               {uploadMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
@@ -395,7 +395,7 @@ export default function TeacherMaterialsPage() {
               <p className="text-sm text-muted-foreground">No materials uploaded yet.</p>
             </div>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -434,7 +434,7 @@ export default function TeacherMaterialsPage() {
       </Card>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-full sm:max-w-lg mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Material</AlertDialogTitle>
             <AlertDialogDescription>
