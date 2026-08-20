@@ -145,7 +145,7 @@ export default function LoginPage() {
           </div>
 
           <div className="text-sm text-muted-foreground">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+            <div className="grid grid-cols-1 lg:grid-cols-1 sm:grid-cols-2 gap-x-4">
               <p>
                 <strong>Teacher:</strong> teacher@edu.com
               </p>
