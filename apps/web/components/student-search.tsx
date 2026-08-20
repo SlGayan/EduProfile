@@ -161,7 +161,7 @@ export function StudentSearch() {
       </div>
 
       {/* Search Form */}
-      <form onSubmit={handleSearch} className="rounded-lg border bg-card p-6">
+      <form onSubmit={handleSearch} className="rounded-lg border bg-card p-4 sm:p-6">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="fullName">Full Name</Label>
@@ -170,6 +170,7 @@ export function StudentSearch() {
               placeholder="Enter student's name..."
               value={filters.fullName}
               onChange={(e) => handleInputChange("fullName", e.target.value)}
+              className="w-full"
             />
           </div>
 
@@ -180,6 +181,7 @@ export function StudentSearch() {
               placeholder="Enter student ID..."
               value={filters.studentId}
               onChange={(e) => handleInputChange("studentId", e.target.value)}
+              className="w-full"
             />
           </div>
 
@@ -191,6 +193,7 @@ export function StudentSearch() {
               placeholder="Enter NIC..."
               value={filters.nicNumber}
               onChange={(e) => handleInputChange("nicNumber", e.target.value)}
+              className="w-full"
             />
           </div>
 
@@ -207,6 +210,7 @@ export function StudentSearch() {
                 const val = e.target.value.slice(0, 4);
                 handleInputChange("olYear", val);
               }}
+              className="w-full"
             />
           </div>
 
@@ -223,16 +227,17 @@ export function StudentSearch() {
                 const val = e.target.value.slice(0, 4);
                 handleInputChange("alYear", val);
               }}
+              className="w-full"
             />
           </div>
         </div>
 
-        <div className="mt-6 flex gap-3">
-          <Button type="submit">
+        <div className="mt-6 flex flex-col sm:flex-row gap-3">
+          <Button type="submit" className="w-full sm:w-auto">
             <Search className="mr-2 h-4 w-4" />
             Search
           </Button>
-          <Button type="button" variant="outline" onClick={handleReset}>
+          <Button type="button" variant="outline" onClick={handleReset} className="w-full sm:w-auto">
             <RotateCcw className="mr-2 h-4 w-4" />
             Reset
           </Button>
@@ -241,7 +246,7 @@ export function StudentSearch() {
 
       {/* Results Section */}
       {hasSearched && (
-        <div className="rounded-lg border bg-card">
+        <div className="rounded-lg border bg-card overflow-x-auto">
           {isLoading ? (
             <div className="p-6 space-y-3">
               <Skeleton className="h-10 w-full" />
