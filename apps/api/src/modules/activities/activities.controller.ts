@@ -15,23 +15,6 @@ type AuthzFailure = { status: number; error: string };
 
 /**
  * The JWT carries a lowercase, frontend-normalized role (see routes/auth.ts) —
-import { Response } from 'express';
-import { AuthRequest } from '../../middleware/authMiddleware.js';
-import { PrismaClient, ExtracurricularActivity } from '@prisma/client';
-import {
-  createActivitySchema,
-  updateActivitySchema,
-  mergedActivityDatesSchema,
-} from '../../validators/activityValidators.js';
-
-// Per-module client, matching every other file in apps/api/src. No shared
-// singleton exists in this codebase; introducing one is out of scope here.
-const prisma = new PrismaClient();
-
-type AuthzFailure = { status: number; error: string };
-
-/**
- * The JWT carries a lowercase, frontend-normalized role (see routes/auth.ts) —
  * ADMINISTRATOR is stored as 'admin', not 'administrator'. Route-level
  * `requireRole` guards use the uppercase Prisma enum names because it
  * re-normalizes internally; in-handler comparisons must use these values.

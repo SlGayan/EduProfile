@@ -297,7 +297,7 @@ router.post('/:id/activities', requireRole(['TEACHER', 'ADMINISTRATOR']), create
 // ---------------------------------------------------------------------------
 // Character Certificate (GET /:id/certificate-profile)
 // ---------------------------------------------------------------------------
-router.get('/:id/certificate-profile', requireRole(['PRINCIPAL', 'ADMINISTRATOR']), async (req, res) => {
+router.get('/:id/certificate-profile', requireRole(['PRINCIPAL']), async (req, res) => {
   try {
     const studentId = parseInt(req.params.id as string, 10);
     if (isNaN(studentId)) {
@@ -305,7 +305,7 @@ router.get('/:id/certificate-profile', requireRole(['PRINCIPAL', 'ADMINISTRATOR'
     }
 
     const student = await prisma.student.findUnique({
-      where: { id: studentId },
+      where: { id: studentId, user: { deletedAt: null } },
       include: {
         termMarks: {
           include: { subject: true },
