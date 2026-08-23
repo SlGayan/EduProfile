@@ -397,7 +397,7 @@ export const getPendingActivities = async (req: AuthRequest, res: Response) => {
     const pendingActivities = await prisma.extracurricularActivity.findMany({
       where: {
         status: 'PENDING',
-        student: { classes: { some: { id: { in: classIds } } } }
+        student: { classes: { some: { id: { in: classIds } } }, user: { deletedAt: null } }
       },
       include: { student: true },
       orderBy: { createdAt: 'desc' },
@@ -424,9 +424,15 @@ export const reviewActivity = async (req: AuthRequest, res: Response) => {
     if (!['APPROVED', 'REJECTED', 'NEEDS_CORRECTION'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
+    if (teacherNote !== undefined && typeof teacherNote !== 'string') {
+      return res.status(400).json({ error: 'teacherNote must be a string' });
+    }
+    if ((status === 'NEEDS_CORRECTION' || status === 'REJECTED') && !teacherNote) {
+      return res.status(400).json({ error: 'teacherNote is required when requesting a correction or rejecting' });
+    }
 
-    const activity = await prisma.extracurricularActivity.findUnique({
-      where: { id: activityId },
+    const activity = await prisma.extracurricularActivity.findFirst({
+      where: { id: activityId, student: { user: { deletedAt: null } } },
       select: { studentId: true }
     });
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
@@ -469,8 +475,8 @@ export const updateMyActivity = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Activity not found' });
     }
 
-    if (existingActivity.status === 'APPROVED') {
-       return res.status(403).json({ error: 'Cannot edit an approved activity' });
+    if (existingActivity.status === 'APPROVED' || existingActivity.status === 'REJECTED') {
+       return res.status(403).json({ error: 'Cannot edit an approved or rejected activity' });
     }
 
     const parsed = updateActivitySchema.safeParse(req.body);

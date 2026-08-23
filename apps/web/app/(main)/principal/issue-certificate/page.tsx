@@ -11,8 +11,44 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { ArrowLeft, Check, ChevronRight, FileText, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+
+type CharacterGrade = "GOOD" | "VERY_GOOD" | "EXCELLENT"
+
+interface ProfileActivity {
+  id: number
+  activityName: string
+  activityType: string
+  description: string | null
+  achievements: string | null
+  status?: string
+}
+
+interface CertificateProfile {
+  fullName: string
+  admissionNumber: string | null
+  dateOfAdmission: string | null
+  attendancePercentage: number | null
+  activities: ProfileActivity[]
+}
+
+interface IssueCertificatePayload {
+  studentId: number
+  selectedActivities: number[]
+  characterGrade: CharacterGrade
+  studentAttributes: string
+  reasonForLeaving: string
+  academicSummary: string
+}
 
 export default function IssueCertificatePage() {
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null)
@@ -45,12 +81,13 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
   const { toast } = useToast()
   
   const [selectedActivities, setSelectedActivities] = useState<number[]>([])
-  const [characterGrade, setCharacterGrade] = useState("EXCELLENT")
+  const [characterGrade, setCharacterGrade] = useState<CharacterGrade>("EXCELLENT")
   const [studentAttributes, setStudentAttributes] = useState("well-behaved, obedient, and respectful")
   const [reasonForLeaving, setReasonForLeaving] = useState("completion of studies")
   const [academicSummary, setAcademicSummary] = useState("")
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading } = useQuery<CertificateProfile>({
     queryKey: ["certificateProfile", studentId],
     queryFn: async () => {
       const res = await apiFetch(`/api/students/${studentId}/certificate-profile`)
@@ -60,7 +97,7 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
   })
 
   const mutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: IssueCertificatePayload) => {
       const res = await apiFetch("/api/certificates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -102,7 +139,8 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
     )
   }
 
-  const handleSubmit = () => {
+  const handleConfirmIssue = () => {
+    setConfirmOpen(false)
     mutation.mutate({
       studentId,
       selectedActivities,
@@ -125,7 +163,7 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
             <div><span className="text-muted-foreground block text-xs">Full Name</span> {profile.fullName}</div>
             <div><span className="text-muted-foreground block text-xs">Admission No</span> {profile.admissionNumber || 'N/A'}</div>
             <div><span className="text-muted-foreground block text-xs">Date of Admission</span> {profile.dateOfAdmission ? new Date(profile.dateOfAdmission).toLocaleDateString() : 'N/A'}</div>
-            <div><span className="text-muted-foreground block text-xs">Attendance</span> {profile.attendancePercentage}%</div>
+            <div><span className="text-muted-foreground block text-xs">Attendance</span> {profile.attendancePercentage ?? 'N/A'}%</div>
           </div>
         </div>
 
@@ -146,7 +184,7 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
             
             <div className="space-y-2">
               <Label>Character Grade</Label>
-              <Select value={characterGrade} onValueChange={setCharacterGrade}>
+              <Select value={characterGrade} onValueChange={(val) => setCharacterGrade(val as CharacterGrade)}>
                 <SelectTrigger><SelectValue placeholder="Select grade" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="EXCELLENT">Excellent</SelectItem>
@@ -181,11 +219,11 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
           <h3 className="text-lg font-semibold border-b pb-2">Select Extracurricular Activities</h3>
           <p className="text-sm text-muted-foreground mb-4">Select the most prominent activities to include in the certificate.</p>
           
-          {profile.activities && profile.activities.filter((act: any) => !act.status || act.status === 'APPROVED').length > 0 ? (
+          {profile.activities && profile.activities.filter((act) => !act.status || act.status === 'APPROVED').length > 0 ? (
             <div className="space-y-3">
               {profile.activities
-                .filter((act: any) => !act.status || act.status === 'APPROVED')
-                .map((act: any) => (
+                .filter((act) => !act.status || act.status === 'APPROVED')
+                .map((act) => (
                 <div key={act.id} className="flex items-start space-x-3 p-3 rounded border hover:bg-muted/50 cursor-pointer" onClick={() => handleToggleActivity(act.id)}>
                   <Checkbox id={`act-${act.id}`} checked={selectedActivities.includes(act.id)} onCheckedChange={() => handleToggleActivity(act.id)} />
                   <div className="grid gap-1.5 leading-none">
@@ -215,21 +253,43 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
             </p>
           </div>
           
-          <Button 
-            className="w-full" 
-            size="lg" 
-            onClick={handleSubmit}
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={() => setConfirmOpen(true)}
             disabled={mutation.isPending}
           >
             {mutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Check className="mr-2 h-5 w-5" />}
             Issue Certificate
           </Button>
-          
+
           <Button variant="outline" className="w-full" onClick={onCancel}>
             Cancel
           </Button>
         </div>
       </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Issue this character certificate?</DialogTitle>
+            <DialogDescription>
+              This action is permanent — once issued, the certificate is assigned an official
+              reference number and cannot be altered. Please confirm the details are correct
+              before proceeding.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmIssue} disabled={mutation.isPending}>
+              {mutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirm & Issue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

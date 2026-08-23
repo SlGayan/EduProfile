@@ -10,11 +10,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FileDown, FileText, Search, AlertCircle, Calendar } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+
+interface CertificateStudent {
+  fullName: string
+  indexNumber: string
+}
+
+interface Certificate {
+  id: string
+  issuedAt: string
+  student: CertificateStudent
+}
 
 export default function CertificatesListPage() {
   const [searchTerm, setSearchTerm] = useState("")
+  const { toast } = useToast()
 
-  const { data: certificates, isLoading, error } = useQuery({
+  const { data: certificates, isLoading, error } = useQuery<Certificate[]>({
     queryKey: ["certificates"],
     queryFn: async () => {
       const res = await apiFetch("/api/certificates")
@@ -23,15 +36,32 @@ export default function CertificatesListPage() {
     }
   })
 
-  const filteredCertificates = certificates?.filter((cert: any) => 
+  const filteredCertificates = certificates?.filter((cert) =>
     cert.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cert.student.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cert.student.indexNumber.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleDownload = (certId: string) => {
-    // Navigate to API endpoint that returns PDF
-    window.open(`/api/certificates/${encodeURIComponent(certId)}/pdf`, '_blank')
+  const handleDownload = async (certId: string) => {
+    try {
+      const res = await apiFetch(`/api/certificates/${encodeURIComponent(certId)}/pdf`)
+      if (!res.ok) throw new Error("Failed to download certificate")
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Character_Certificate_${certId.replace(/\//g, "_")}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Download failed",
+        description: err instanceof Error ? err.message : "An unknown error occurred",
+      })
+    }
   }
 
   return (
@@ -88,7 +118,7 @@ export default function CertificatesListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCertificates.map((cert: any) => (
+              {filteredCertificates.map((cert) => (
                 <TableRow key={cert.id}>
                   <TableCell className="font-medium">{cert.id}</TableCell>
                   <TableCell>{cert.student.fullName}</TableCell>
