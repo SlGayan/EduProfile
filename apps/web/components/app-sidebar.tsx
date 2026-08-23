@@ -15,6 +15,7 @@ import {
   School,
   BarChart3,
   TrendingUp,
+  ClipboardList,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -31,6 +32,7 @@ const teacherNavItems = [
   { href: "/teacher/search-students", label: "Search Students", icon: Search },
   { href: "/teacher/class-marks", label: "Class Marks", icon: BarChart3 },
   { href: "/teacher/analytics", label: "Analytics", icon: TrendingUp },
+  { href: "/teacher/pending-activities", label: "Pending Activities", icon: ClipboardList },
   { href: "/teacher/materials", label: "Study Materials", icon: FileText },
 ]
 
@@ -38,6 +40,7 @@ const principalNavItems = [
   { href: "/principal/dashboard", label: "Dashboard", icon: Home },
   { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/principal/search-students", label: "Search Students", icon: Search },
+  { href: "/principal/certificates", label: "Certificates", icon: FileText },
   { href: "/principal/analytics", label: "Analytics", icon: TrendingUp },
 ]
 

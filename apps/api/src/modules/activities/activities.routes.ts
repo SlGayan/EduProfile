@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { verifyToken, requireRole } from '../../middleware/authMiddleware.js';
-import { updateActivity, deleteActivity } from './activities.controller.js';
+import { updateActivity, deleteActivity, reviewActivity } from './activities.controller.js';
 
 const router = Router();
 
@@ -11,5 +11,7 @@ const router = Router();
 router.put('/:id', verifyToken, requireRole(['TEACHER', 'ADMINISTRATOR']), updateActivity);
 
 router.delete('/:id', verifyToken, requireRole(['TEACHER', 'ADMINISTRATOR']), deleteActivity);
+
+router.patch('/:id/status', verifyToken, requireRole(['TEACHER', 'ADMINISTRATOR']), reviewActivity);
 
 export default router;

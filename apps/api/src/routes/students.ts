@@ -14,6 +14,8 @@ import {
   listActivities,
   createActivity,
   listMyActivities,
+  submitMyActivity,
+  updateMyActivity,
 } from '../modules/activities/activities.controller.js';
 import { listMyMaterials } from '../modules/materials/materials.controller.js';
 
@@ -75,6 +77,8 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
 // the STUDENT caller never reaches the handler, and the failure reads as an
 // auth problem rather than a routing one. Do not move it.
 router.get('/me/activities', requireRole(['STUDENT']), listMyActivities);
+router.post('/me/activities', requireRole(['STUDENT']), submitMyActivity);
+router.patch('/me/activities/:id', requireRole(['STUDENT']), updateMyActivity);
 
 // Story 9.4 — the caller's own study materials. Same route-ordering rule as
 // /me/activities above: must stay above the `/:id/...` routes at the bottom
@@ -289,5 +293,40 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
 router.get('/:id/activities', requireRole(['TEACHER', 'ADMINISTRATOR']), listActivities);
 
 router.post('/:id/activities', requireRole(['TEACHER', 'ADMINISTRATOR']), createActivity);
+
+// ---------------------------------------------------------------------------
+// Character Certificate (GET /:id/certificate-profile)
+// ---------------------------------------------------------------------------
+router.get('/:id/certificate-profile', requireRole(['PRINCIPAL', 'ADMINISTRATOR']), async (req, res) => {
+  try {
+    const studentId = parseInt(req.params.id as string, 10);
+    if (isNaN(studentId)) {
+      return res.status(400).json({ error: 'Invalid student ID' });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        termMarks: {
+          include: { subject: true },
+          orderBy: [{ year: 'desc' }, { term: 'desc' }],
+        },
+        activities: {
+          where: { status: 'APPROVED' },
+          orderBy: { startDate: 'desc' },
+        },
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    return res.status(200).json(student);
+  } catch (err) {
+    console.error('Error fetching certificate profile:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 export default router;

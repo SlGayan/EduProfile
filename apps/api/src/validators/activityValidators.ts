@@ -72,6 +72,7 @@ const activityFields = {
   startDate: dateString('startDate'),
   endDate: dateString('endDate').optional(),
   achievements: optionalText(2000),
+  evidenceUrl: optionalText(2000),
 };
 
 // Built fresh per use — Zod's refine options type requires a mutable `path`.

@@ -15,6 +15,23 @@ type AuthzFailure = { status: number; error: string };
 
 /**
  * The JWT carries a lowercase, frontend-normalized role (see routes/auth.ts) —
+import { Response } from 'express';
+import { AuthRequest } from '../../middleware/authMiddleware.js';
+import { PrismaClient, ExtracurricularActivity } from '@prisma/client';
+import {
+  createActivitySchema,
+  updateActivitySchema,
+  mergedActivityDatesSchema,
+} from '../../validators/activityValidators.js';
+
+// Per-module client, matching every other file in apps/api/src. No shared
+// singleton exists in this codebase; introducing one is out of scope here.
+const prisma = new PrismaClient();
+
+type AuthzFailure = { status: number; error: string };
+
+/**
+ * The JWT carries a lowercase, frontend-normalized role (see routes/auth.ts) —
  * ADMINISTRATOR is stored as 'admin', not 'administrator'. Route-level
  * `requireRole` guards use the uppercase Prisma enum names because it
  * re-normalizes internally; in-handler comparisons must use these values.
@@ -30,6 +47,9 @@ function serializeActivity(activity: ExtracurricularActivity) {
     startDate: activity.startDate.toISOString(),
     endDate: activity.endDate ? activity.endDate.toISOString() : null,
     achievements: activity.achievements,
+    status: activity.status,
+    teacherNote: activity.teacherNote,
+    evidenceUrl: activity.evidenceUrl,
   };
 }
 
@@ -191,7 +211,7 @@ export const createActivity = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
     }
 
-    const { activityName, activityType, description, startDate, endDate, achievements } =
+    const { activityName, activityType, description, startDate, endDate, achievements, evidenceUrl } =
       parsed.data;
 
     const activity = await prisma.extracurricularActivity.create({
@@ -203,6 +223,8 @@ export const createActivity = async (req: AuthRequest, res: Response) => {
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         achievements: achievements ?? null,
+        evidenceUrl: evidenceUrl ?? null,
+        status: 'APPROVED',
       },
     });
 
@@ -237,7 +259,7 @@ export const updateActivity = async (req: AuthRequest, res: Response) => {
     }
 
     const existing = loaded.activity;
-    const { activityName, activityType, description, startDate, endDate, achievements } =
+    const { activityName, activityType, description, startDate, endDate, achievements, evidenceUrl } =
       parsed.data;
 
     // The payload may carry only one of the two dates, so the order rule is
@@ -261,6 +283,7 @@ export const updateActivity = async (req: AuthRequest, res: Response) => {
         ...(activityType !== undefined && { activityType }),
         ...(description !== undefined && { description }),
         ...(achievements !== undefined && { achievements }),
+        ...(evidenceUrl !== undefined && { evidenceUrl }),
         ...(startDate !== undefined && { startDate: nextStartDate }),
         ...(endDate !== undefined && { endDate: nextEndDate }),
       },
@@ -337,6 +360,164 @@ export const listMyActivities = async (req: AuthRequest, res: Response) => {
     return res.status(200).json(activities.map(serializeActivity));
   } catch (err) {
     console.error('Error listing own activities:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// POST /api/students/me/activities
+export const submitMyActivity = async (req: AuthRequest, res: Response) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    const parsed = createActivitySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+
+    const { activityName, activityType, description, startDate, endDate, achievements, evidenceUrl } = parsed.data;
+
+    const activity = await prisma.extracurricularActivity.create({
+      data: {
+        studentId: student.id,
+        activityName,
+        activityType,
+        description: description ?? null,
+        startDate: new Date(startDate),
+        endDate: endDate ? new Date(endDate) : null,
+        achievements: achievements ?? null,
+        evidenceUrl: evidenceUrl ?? null,
+        status: 'PENDING',
+      },
+    });
+
+    return res.status(201).json(serializeActivity(activity));
+  } catch (err) {
+    console.error('Error submitting activity:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// GET /api/teachers/me/pending-activities
+export const getPendingActivities = async (req: AuthRequest, res: Response) => {
+  try {
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      include: { classes: true },
+    });
+    if (!teacher || teacher.classes.length === 0) {
+      return res.status(200).json([]);
+    }
+    const classIds = teacher.classes.map((c) => c.id);
+
+    const pendingActivities = await prisma.extracurricularActivity.findMany({
+      where: {
+        status: 'PENDING',
+        student: { classes: { some: { id: { in: classIds } } } }
+      },
+      include: { student: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.status(200).json(pendingActivities.map((act) => ({
+      ...serializeActivity(act),
+      studentName: act.student.fullName,
+      admissionNumber: act.student.admissionNumber,
+    })));
+  } catch (err) {
+    console.error('Error fetching pending activities:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// PATCH /api/activities/:id/status
+export const reviewActivity = async (req: AuthRequest, res: Response) => {
+  try {
+    const activityId = parseId(req.params.id);
+    if (activityId === null) return res.status(400).json({ error: 'Invalid activity ID' });
+
+    const { status, teacherNote } = req.body;
+    if (!['APPROVED', 'REJECTED', 'NEEDS_CORRECTION'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const activity = await prisma.extracurricularActivity.findUnique({
+      where: { id: activityId },
+      select: { studentId: true }
+    });
+    if (!activity) return res.status(404).json({ error: 'Activity not found' });
+
+    const failure = await authorizeStudentAccess(req, activity.studentId);
+    if (failure) return res.status(failure.status).json({ error: failure.error });
+
+    const updated = await prisma.extracurricularActivity.update({
+      where: { id: activityId },
+      data: { 
+        status,
+        teacherNote: teacherNote ?? null
+      },
+    });
+
+    return res.status(200).json(serializeActivity(updated));
+  } catch (err) {
+    console.error('Error reviewing activity:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// PATCH /api/students/me/activities/:id
+export const updateMyActivity = async (req: AuthRequest, res: Response) => {
+  try {
+    const activityId = parseId(req.params.id);
+    if (activityId === null) return res.status(400).json({ error: 'Invalid activity ID' });
+
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    const existingActivity = await prisma.extracurricularActivity.findFirst({
+      where: { id: activityId, studentId: student.id }
+    });
+
+    if (!existingActivity) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
+
+    if (existingActivity.status === 'APPROVED') {
+       return res.status(403).json({ error: 'Cannot edit an approved activity' });
+    }
+
+    const parsed = updateActivitySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+
+    const { activityName, activityType, description, startDate, endDate, achievements, evidenceUrl } = parsed.data;
+
+    const nextStartDate = startDate !== undefined ? new Date(startDate) : existingActivity.startDate;
+    const nextEndDate = endDate !== undefined ? new Date(endDate) : existingActivity.endDate;
+
+    const merged = mergedActivityDatesSchema.safeParse({ startDate: nextStartDate, endDate: nextEndDate });
+    if (!merged.success) return res.status(400).json({ error: 'Invalid input', details: merged.error.issues });
+
+    const updated = await prisma.extracurricularActivity.update({
+      where: { id: activityId },
+      data: {
+        ...(activityName !== undefined && { activityName }),
+        ...(activityType !== undefined && { activityType }),
+        ...(description !== undefined && { description }),
+        ...(achievements !== undefined && { achievements }),
+        ...(evidenceUrl !== undefined && { evidenceUrl }),
+        ...(startDate !== undefined && { startDate: nextStartDate }),
+        ...(endDate !== undefined && { endDate: nextEndDate }),
+        status: 'PENDING',
+      }
+    });
+
+    return res.status(200).json(serializeActivity(updated));
+  } catch (err) {
+    console.error('Error updating my activity:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
