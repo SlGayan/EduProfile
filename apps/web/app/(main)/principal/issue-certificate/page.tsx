@@ -181,9 +181,11 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
           <h3 className="text-lg font-semibold border-b pb-2">Select Extracurricular Activities</h3>
           <p className="text-sm text-muted-foreground mb-4">Select the most prominent activities to include in the certificate.</p>
           
-          {profile.activities && profile.activities.length > 0 ? (
+          {profile.activities && profile.activities.filter((act: any) => !act.status || act.status === 'APPROVED').length > 0 ? (
             <div className="space-y-3">
-              {profile.activities.map((act: any) => (
+              {profile.activities
+                .filter((act: any) => !act.status || act.status === 'APPROVED')
+                .map((act: any) => (
                 <div key={act.id} className="flex items-start space-x-3 p-3 rounded border hover:bg-muted/50 cursor-pointer" onClick={() => handleToggleActivity(act.id)}>
                   <Checkbox id={`act-${act.id}`} checked={selectedActivities.includes(act.id)} onCheckedChange={() => handleToggleActivity(act.id)} />
                   <div className="grid gap-1.5 leading-none">
@@ -198,7 +200,7 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
               ))}
             </div>
           ) : (
-            <p className="text-sm italic text-muted-foreground">No extracurricular activities recorded.</p>
+            <p className="text-sm italic text-muted-foreground">No approved extracurricular activities recorded.</p>
           )}
         </div>
       </div>

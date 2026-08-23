@@ -34,7 +34,7 @@ export const issueCertificate = async (req: AuthRequest, res: Response) => {
       where: { id: studentId },
       include: {
         termMarks: { include: { subject: true } },
-        activities: { where: { id: { in: selectedActivities || [] } } },
+        activities: { where: { id: { in: selectedActivities || [] }, status: 'APPROVED' } },
       }
     });
 
