@@ -38,6 +38,50 @@ Username: postgres
 Password: [see apps/api/.env for password]
 ```
 
+## Study Material Storage Setup (Azure Blob Storage)
+
+Study materials (PDF/DOC/image uploads) are stored in Azure Blob Storage, not on local disk. The API authenticates via your own Azure identity locally (no shared keys or connection strings are used anywhere), so each developer needs their own access grant before uploads/downloads/deletes will work locally.
+
+### Prerequisites
+
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) installed
+- Access to the EduProfile Azure subscription — ask the project owner to add you
+
+### One-time setup per developer
+
+1. **Log in to Azure CLI**
+   ```bash
+   az login
+   ```
+   Make sure it logs into the EduProfile subscription (`az account show`).
+
+2. **Ask the project owner to grant you storage access.** You can't grant this to yourself — only someone with Owner/User Access Administrator on the subscription can. Send them your account email and ask them to run:
+   ```bash
+   az role assignment create \
+     --assignee "<your-azure-account-email>" \
+     --role "Storage Blob Data Contributor" \
+     --scope "/subscriptions/<subscription-id>/resourceGroups/EduProfile-RG/providers/Microsoft.Storage/storageAccounts/eduprofilematerials"
+   ```
+   Role assignments take a minute or two to propagate — if uploads fail with `AuthorizationPermissionMismatch` right after being granted access, wait a bit and retry.
+
+3. **Add the storage config to `apps/api/.env`** (see [Environment Variables](#environment-variables) below). No key or secret is needed — the API picks up your `az login` session automatically via `DefaultAzureCredential`.
+
+That's it — no separate storage emulator or local blob setup needed; local dev talks to the real (shared) `study-materials` container in the cloud.
+
+### Rebuilding the storage infrastructure
+
+The storage account, its container, the CORS rules, and the API's role assignment are all declared in [`infra/storage.bicep`](infra/storage.bicep). You only need this if you're standing up a new environment or recreating the account — day-to-day development never touches it.
+
+```bash
+az deployment group create \
+  --resource-group EduProfile-RG \
+  --template-file infra/storage.bicep \
+  --parameters apiAppName=eduprofile-api-prod \
+  --parameters webAppOrigins='["https://<web-app-host>","http://localhost:3000"]'
+```
+
+The CORS rule in that template is load-bearing and easy to overlook: downloads redirect the browser to Blob Storage, so without it every download fails, and without `Content-Disposition` in its `exposedHeaders` files save under the wrong name. **If `apps/web` is ever served from a new hostname, add that origin to `webAppOrigins` and redeploy**, or downloads will break from the new host only.
+
 ## Development
 
 ### Setup
@@ -131,6 +175,11 @@ eduprofile/
 ```env
 DATABASE_URL="postgresql://postgres:password@localhost:5432/eduprofile"
 PORT=8000
+
+# Azure Blob Storage (study materials) — see "Study Material Storage Setup" above.
+# No key/secret: auth is via your `az login` session locally, Managed Identity in production.
+AZURE_STORAGE_ACCOUNT_NAME=eduprofilematerials
+AZURE_STORAGE_CONTAINER_NAME=study-materials
 ```
 
 ### Web App (apps/web/.env.local)

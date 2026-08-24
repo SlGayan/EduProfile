@@ -17,6 +17,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@azure/identity": "^4.13.2",
+    "@azure/storage-blob": "^12.33.0",
     "@prisma/client": "^6.17.1",
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.3",
