@@ -72,7 +72,14 @@ export function AppHeader() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              if (user?.role === "admin") router.push("/admin/users")
+              else if (user?.role === "teacher") router.push("/teacher/dashboard")
+              else if (user?.role === "principal") router.push("/principal/dashboard")
+              else if (user?.role === "student") router.push("/student/profile")
+            }}>
+              Profile
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
           </DropdownMenuContent>
