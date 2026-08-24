@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/authMiddleware.js';
+import { getPendingActivities } from '../modules/activities/activities.controller.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -24,6 +25,8 @@ router.get('/me/classes', requireRole(['TEACHER']), async (req: AuthRequest, res
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+router.get('/me/pending-activities', requireRole(['TEACHER']), getPendingActivities);
 
 router.get('/', requireRole(['ADMINISTRATOR', 'PRINCIPAL']), async (req: AuthRequest, res) => {
   try {

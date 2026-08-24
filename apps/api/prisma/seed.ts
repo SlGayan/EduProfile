@@ -149,12 +149,22 @@ async function main() {
   
   const mainStudentProfile = await prisma.student.upsert({
     where: { userId: mainStudentUser.id },
-    update: { classes: { set: [{ id: mainClass.id }] } },
+    update: {
+      classes: { set: [{ id: mainClass.id }] },
+      admissionNumber: '2019/000',
+      dateOfAdmission: new Date('2019-01-01'),
+      admissionGrade: '6',
+      attendancePercentage: 92.5,
+    },
     create: {
       userId: mainStudentUser.id,
       fullName: 'Kasun Perera (Test Student)',
       indexNumber: 'STU0000',
+      admissionNumber: '2019/000',
       dateOfBirth: new Date('2008-01-01'),
+      dateOfAdmission: new Date('2019-01-01'),
+      admissionGrade: '6',
+      attendancePercentage: 92.5,
       address: 'Test Address',
       nicNumber: '200800000000',
       olYear: 2024,
@@ -180,18 +190,34 @@ async function main() {
       create: { email, password: hashedPassword, role: 'STUDENT' },
     });
 
+    const admissionYear = 2018 + (i % 5);
+    const admissionNumber = `${admissionYear}/${(i + 1).toString().padStart(3, '0')}`;
+    const dateOfAdmission = new Date(`${admissionYear}-01-01`);
+    const admissionGrade = '6';
+    const attendancePercentage = 75 + (i % 25);
+
     const profile = await prisma.student.upsert({
       where: { userId: user.id },
-      update: { classes: { set: [{ id: assignedClass.id }] } },
+      update: {
+        classes: { set: [{ id: assignedClass.id }] },
+        admissionNumber,
+        dateOfAdmission,
+        admissionGrade,
+        attendancePercentage,
+      },
       create: {
         userId: user.id,
         fullName: `${fName} ${lName}`,
-        indexNumber,
-        dateOfBirth: randomDate(new Date(2007, 0, 1), new Date(2009, 11, 31)),
-        address: `No ${randomInt(1, 100)}, Test Road, City ${randomInt(1, 10)}`,
+        indexNumber: indexNumber,
+        admissionNumber,
+        dateOfBirth: new Date(`${2005 + (i % 5)}-${(i % 12) + 1}-15`),
+        dateOfAdmission,
+        admissionGrade,
+        attendancePercentage,
+        address: `${Math.floor(Math.random() * 100) + 1}, Main Road, Colombo ${Math.floor(Math.random() * 15) + 1}`,
         nicNumber: `${randomInt(200700000000, 200999999999)}`,
-        olYear: 2024,
-        alYear: 2026,
+        olYear: 2024 + (i % 3),
+        alYear: 2026 + (i % 3),
         classes: { connect: [{ id: assignedClass.id }] },
       },
     });
