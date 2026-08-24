@@ -28,6 +28,7 @@ model User {
   mustChangePassword Boolean @default(false)
   student   Student?
   teacher   Teacher?
+  issuedCertificates CharacterCertificate[]
 }
 
 model Student {
@@ -41,9 +42,14 @@ model Student {
   nicNumber   String?    @unique
   olYear      Int?
   alYear      Int?
+  admissionNumber String? @unique
+  dateOfAdmission DateTime?
+  admissionGrade  String?
+  attendancePercentage Float?
   classes     Class[]
   termMarks   TermMark[]
   activities  ExtracurricularActivity[]
+  certificates CharacterCertificate[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
@@ -96,6 +102,12 @@ model TermMark {
   @@index([subjectId])
 }
 
+enum ActivityStatus {
+  PENDING
+  APPROVED
+  NEEDS_CORRECTION
+  REJECTED
+}
 model ExtracurricularActivity {
   id           Int       @id @default(autoincrement())
   studentId    Int
@@ -106,6 +118,9 @@ model ExtracurricularActivity {
   startDate    DateTime
   endDate      DateTime?
   achievements String?
+  evidenceUrl  String?
+  status       ActivityStatus @default(PENDING)
+  teacherNote  String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -129,4 +144,28 @@ model StudyMaterial {
 
   @@index([classId])
   @@index([subjectId])
+}
+
+enum CharacterGrade {
+  GOOD
+  VERY_GOOD
+  EXCELLENT
+}
+
+model CharacterCertificate {
+  id               String   @id // Format: DSCTH/CC/YYYY/NNNN
+  studentId        Int
+  student          Student  @relation(fields: [studentId], references: [id])
+  principalId      Int
+  principal        User     @relation(fields: [principalId], references: [id])
+  selectedActivities String[]
+  reasonForLeaving String?
+  characterGrade   CharacterGrade?
+  studentAttributes String?
+  academicSummary  String?
+  issuedAt         DateTime @default(now())
+  contentSnapshot  Json
+
+  @@index([studentId])
+  @@index([principalId])
 }

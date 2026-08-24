@@ -55,7 +55,7 @@ describe("StudentActivitiesPage — empty state (AC2, subtask 6.3)", () => {
 
     expect(await screen.findByText("No activities recorded yet")).toBeInTheDocument()
     expect(
-      screen.getByText(/haven't added any extracurricular activities/i),
+      screen.getByText(/haven't submitted any extracurricular activities/i),
     ).toBeInTheDocument()
   })
 
@@ -112,15 +112,22 @@ describe("StudentActivitiesPage — populated list (AC1, subtask 6.4)", () => {
     expect(await screen.findByText("2026-01-15 – Ongoing")).toBeInTheDocument()
   })
 
-  it("is strictly read-only — renders no interactive control of any kind", async () => {
+  it("renders submit activity button and conditionally renders correction actions", async () => {
     apiFetchMock.mockResolvedValue(jsonResponse([oneActivity]))
     renderPage()
 
     await screen.findByText("Debate Club")
-    // AC1 says read-only. Any button/link/textbox here would be a regression.
-    expect(screen.queryAllByRole("button")).toHaveLength(0)
-    expect(screen.queryAllByRole("link")).toHaveLength(0)
-    expect(screen.queryAllByRole("textbox")).toHaveLength(0)
+    expect(screen.getByRole("button", { name: /submit activity/i })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /correct/i })).not.toBeInTheDocument()
+  })
+
+  it("renders correct button when status is NEEDS_CORRECTION", async () => {
+    apiFetchMock.mockResolvedValue(jsonResponse([{ ...oneActivity, status: "NEEDS_CORRECTION", teacherNote: "Please provide evidence" }]))
+    renderPage()
+
+    await screen.findByText("Debate Club")
+    expect(screen.getByText(/Note: Please provide evidence/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /correct/i })).toBeInTheDocument()
   })
 })
 

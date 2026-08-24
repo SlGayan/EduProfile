@@ -16,6 +16,10 @@ import { apiFetch } from "@/lib/apiFetch"
 import { getCurrentUser } from "@/lib/auth"
 import { sortStudents, formatDate, type SortField, type SortOrder } from "@/lib/studentSearch"
 
+interface StudentSearchProps {
+  onSelectStudent?: (studentId: number) => void;
+}
+
 interface SearchFilters {
   fullName: string
   studentId: string
@@ -64,7 +68,7 @@ async function fetchStudentSearch(queryParams: string): Promise<StudentSearchRes
   return data
 }
 
-export function StudentSearch() {
+export default function StudentSearch({ onSelectStudent }: StudentSearchProps = {}) {
   const router = useRouter()
 
   // Role guard — only ADMINISTRATOR, PRINCIPAL, or TEACHER (stored lowercase in auth)
@@ -301,7 +305,11 @@ export function StudentSearch() {
               </TableHeader>
               <TableBody>
                 {sortedStudents.map((student) => (
-                  <TableRow key={student.id}>
+                  <TableRow 
+                    key={student.id} 
+                    className={onSelectStudent ? "cursor-pointer hover:bg-muted/50" : ""}
+                    onClick={() => onSelectStudent?.(student.id)}
+                  >
                     <TableCell className="font-medium">{student.indexNumber}</TableCell>
                     <TableCell>{student.fullName}</TableCell>
                     <TableCell>{formatDate(student.dateOfBirth)}</TableCell>

@@ -1,25 +1,17 @@
-import fs from 'fs';
-import path from 'path';
-import { randomUUID } from 'crypto';
 import multer from 'multer';
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../../middleware/authMiddleware.js';
 import { ALLOWED_MATERIAL_MIME_TYPES } from '../../validators/materialValidators.js';
 
-export const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'study-materials');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
 const parsedMaxMb = parseInt(process.env.MAX_MATERIAL_UPLOAD_MB || '', 10);
 export const MAX_MATERIAL_UPLOAD_MB = Number.isNaN(parsedMaxMb) || parsedMaxMb <= 0 ? 10 : parsedMaxMb;
 const MAX_MATERIAL_UPLOAD_BYTES = MAX_MATERIAL_UPLOAD_MB * 1024 * 1024;
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => cb(null, `${randomUUID()}${path.extname(file.originalname)}`),
-});
-
+// Buffers in memory rather than writing to local disk -- the file's final
+// destination is Azure Blob Storage (materials.blob.ts), written directly
+// from req.file.buffer in the controller. 10MB cap keeps this cheap.
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: MAX_MATERIAL_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
     if (!(ALLOWED_MATERIAL_MIME_TYPES as readonly string[]).includes(file.mimetype)) {

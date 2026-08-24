@@ -1,9 +1,10 @@
-import fs from 'fs';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import { Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { AuthRequest } from '../../middleware/authMiddleware.js';
 import { createMaterialSchema, materialListQuerySchema, POSTGRES_INT4_MAX } from '../../validators/materialValidators.js';
+import { uploadBlob, deleteBlob, blobExists, getDownloadSasUrl } from './materials.blob.js';
 
 const prisma = new PrismaClient();
 
@@ -31,17 +32,7 @@ function serializeMaterial(material: {
   };
 }
 
-function unlinkQuiet(filePath: string) {
-  fs.unlink(filePath, (err) => {
-    if (err && err.code !== 'ENOENT') {
-      console.error('Failed to remove uploaded file:', err);
-    }
-  });
-}
-
 export const createMaterial = async (req: AuthRequest, res: Response) => {
-  const uploadedFilePath = req.file?.path;
-
   try {
     if (!req.file) {
       return res
@@ -51,7 +42,6 @@ export const createMaterial = async (req: AuthRequest, res: Response) => {
 
     const parsed = createMaterialSchema.safeParse(req.body);
     if (!parsed.success) {
-      unlinkQuiet(uploadedFilePath!);
       return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
     }
 
@@ -60,7 +50,6 @@ export const createMaterial = async (req: AuthRequest, res: Response) => {
     if (classId !== undefined) {
       const classExists = await prisma.class.findUnique({ where: { id: classId } });
       if (!classExists) {
-        unlinkQuiet(uploadedFilePath!);
         return res.status(404).json({ error: 'Class not found' });
       }
     }
@@ -68,7 +57,6 @@ export const createMaterial = async (req: AuthRequest, res: Response) => {
     if (subjectId !== undefined) {
       const subjectExists = await prisma.subject.findUnique({ where: { id: subjectId } });
       if (!subjectExists) {
-        unlinkQuiet(uploadedFilePath!);
         return res.status(404).json({ error: 'Subject not found' });
       }
     }
@@ -78,31 +66,38 @@ export const createMaterial = async (req: AuthRequest, res: Response) => {
     });
 
     if (!teacher) {
-      unlinkQuiet(uploadedFilePath!);
       return res.status(403).json({ error: 'Teacher profile not found' });
     }
 
-    const fileUrl = `/uploads/study-materials/${req.file.filename}`;
+    // AD-4: blob write first, DB insert second. A failed insert after a
+    // successful blob write is compensated by deleting the just-written blob
+    // (below) — the reverse ordering would risk a row pointing at nothing.
+    const blobKey = `${randomUUID()}${path.extname(req.file.originalname)}`;
+    await uploadBlob(blobKey, req.file.buffer, req.file.mimetype);
 
-    const material = await prisma.studyMaterial.create({
-      data: {
-        title,
-        description: description ?? null,
-        fileUrl,
-        fileType: req.file.mimetype,
-        uploadedById: teacher.id,
-        classId: classId ?? null,
-        subjectId: subjectId ?? null,
-      },
-      include: { uploadedBy: { select: { id: true } } },
-    });
+    try {
+      const material = await prisma.studyMaterial.create({
+        data: {
+          title,
+          description: description ?? null,
+          fileUrl: blobKey,
+          fileType: req.file.mimetype,
+          uploadedById: teacher.id,
+          classId: classId ?? null,
+          subjectId: subjectId ?? null,
+        },
+        include: { uploadedBy: { select: { id: true } } },
+      });
 
-    return res.status(201).json(serializeMaterial(material));
+      return res.status(201).json(serializeMaterial(material));
+    } catch (err) {
+      await deleteBlob(blobKey).catch((cleanupErr) =>
+        console.error('Failed to compensate blob after DB insert failure:', cleanupErr)
+      );
+      throw err;
+    }
   } catch (err) {
     console.error('Error creating material:', err);
-    if (uploadedFilePath) {
-      unlinkQuiet(uploadedFilePath);
-    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -236,30 +231,17 @@ export const downloadMaterial = async (req: AuthRequest, res: Response) => {
     // downloading is lower-risk than deleting, and teachers already see
     // every material via the list endpoint regardless of who uploaded it.
 
-    const filePath = path.join(
-      process.cwd(),
-      'uploads',
-      'study-materials',
-      path.basename(material.fileUrl)
-    );
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'File not found on disk' });
+    // AD-5: check existence before minting a SAS, so a missing blob (e.g. an
+    // orphaned row) returns this app's JSON error envelope rather than
+    // letting the redirected browser hit a raw Azure error page.
+    const blobKey = path.basename(material.fileUrl);
+    if (!(await blobExists(blobKey))) {
+      return res.status(404).json({ error: 'File not found in storage' });
     }
 
     const downloadFilename = `${sanitizeFilename(material.title)}${path.extname(material.fileUrl)}`;
-    return res.download(filePath, downloadFilename, (err) => {
-      // res.download's own callback is the only reliable way to catch a
-      // stream error here — by the time it fires, headers may already be
-      // sent, so this can only avoid a hung/uncaught-looking request, not
-      // change the response once streaming has started.
-      if (err && !res.headersSent) {
-        console.error('Error streaming material download:', err);
-        res.status(500).json({ error: 'Internal server error' });
-      } else if (err) {
-        console.error('Error streaming material download (headers already sent):', err);
-      }
-    });
+    const sasUrl = await getDownloadSasUrl(blobKey, downloadFilename);
+    return res.redirect(302, sasUrl);
   } catch (err) {
     console.error('Error downloading material:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -297,13 +279,12 @@ export const deleteMaterial = async (req: AuthRequest, res: Response) => {
       throw err;
     }
 
-    const filePath = path.join(
-      process.cwd(),
-      'uploads',
-      'study-materials',
-      path.basename(material.fileUrl)
+    // AD-4: DB row deleted first (above), blob second — unchanged ordering
+    // from before. A failure here leaves an orphaned blob (wasted storage,
+    // harmless) rather than a row pointing at nothing.
+    await deleteBlob(path.basename(material.fileUrl)).catch((err) =>
+      console.error('Failed to delete blob after material row deletion:', err)
     );
-    unlinkQuiet(filePath);
 
     return res.status(200).json({ message: 'Material deleted' });
   } catch (err) {

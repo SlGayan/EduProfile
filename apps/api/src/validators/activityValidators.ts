@@ -72,6 +72,10 @@ const activityFields = {
   startDate: dateString('startDate'),
   endDate: dateString('endDate').optional(),
   achievements: optionalText(2000),
+  evidenceUrl: optionalText(2000).refine(
+    (val) => val === undefined || /^https?:\/\//i.test(val),
+    'evidenceUrl must be a valid http(s) URL'
+  ),
 };
 
 // Built fresh per use — Zod's refine options type requires a mutable `path`.

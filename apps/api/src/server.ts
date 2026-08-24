@@ -12,6 +12,7 @@ import activitiesRouter from './modules/activities/activities.routes.js';
 import materialsRouter from './modules/materials/materials.routes.js';
 import subjectsRouter from './modules/subjects/subjects.routes.js';
 import analyticsRouter from './modules/analytics/analytics.routes.js';
+import certificateRoutes from './routes/certificates.js';
 
 dotenv.config();
 
@@ -59,6 +60,9 @@ app.use('/api/students', studentsRouter);
 
 // Teacher listing routes
 app.use('/api/teachers', teachersRouter);
+
+// Certificate routes
+app.use('/api/certificates', certificateRoutes);
 
 // Marks management routes (bulk import)
 app.use('/api/marks', marksRouter);

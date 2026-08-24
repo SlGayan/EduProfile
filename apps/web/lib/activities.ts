@@ -24,6 +24,11 @@ export interface Activity {
   startDate: string
   endDate: string | null
   achievements: string | null
+  status?: "PENDING" | "APPROVED" | "NEEDS_CORRECTION" | "REJECTED"
+  evidenceUrl?: string | null
+  teacherNote?: string | null
+  studentName?: string
+  admissionNumber?: string | null
 }
 
 /**
