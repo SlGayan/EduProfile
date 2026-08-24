@@ -61,10 +61,17 @@ jobs:
         run: cd apps/api && npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:password@localhost:5432/eduprofile_test
+      - name: Seed database
+        run: cd apps/api && npx prisma db seed
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/eduprofile_test
+          BCRYPT_SALT_ROUNDS: '10'
       - name: Run API Tests
         run: cd apps/api && npm test
         env:
           DATABASE_URL: postgresql://postgres:password@localhost:5432/eduprofile_test
+          APP_JWT_SECRET: test-secret-key-for-ci
+          JWT_EXPIRES_IN: 15m
 
   test-web:
     name: Test Web
