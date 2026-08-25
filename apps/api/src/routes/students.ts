@@ -1,4 +1,6 @@
-import { Router } from 'express';
+import { randomUUID } from 'crypto';
+import path from 'path';
+import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import bcrypt from 'bcrypt';
@@ -9,6 +11,8 @@ import {
   EXPECTED_IMPORT_COLUMNS,
   studentImportRowSchema,
   studentSearchQuerySchema,
+  updateMyProfileSchema,
+  upsertGuardianSchema,
 } from '../validators/studentValidators.js';
 import {
   listActivities,
@@ -18,10 +22,41 @@ import {
   updateMyActivity,
 } from '../modules/activities/activities.controller.js';
 import { listMyMaterials } from '../modules/materials/materials.controller.js';
+import { uploadBlob, deleteBlob, getInlineSasUrl } from '../modules/materials/materials.blob.js';
+import { findCertificateByIdParam, streamCertificatePdf } from '../modules/certificates/certificates.controller.js';
 
 const prisma = new PrismaClient();
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+const ALLOWED_PHOTO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+const MAX_PHOTO_UPLOAD_BYTES = 5 * 1024 * 1024;
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_PHOTO_UPLOAD_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!(ALLOWED_PHOTO_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
+      return cb(null, false);
+    }
+    cb(null, true);
+  },
+});
+
+function uploadPhotoFile(req: AuthRequest, res: Response, next: NextFunction) {
+  photoUpload.single('file')(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'Photo exceeds the maximum allowed size of 5MB' });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) {
+      console.error('Photo upload error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    next();
+  });
+}
 
 // Sized for legitimate interactive staff search (not /login's 5/15min) —
 // blunts NIC-enumeration attempts without hindering normal use.
@@ -43,12 +78,21 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
   try {
     const student = await prisma.student.findUnique({
       where: { userId: req.user!.id, user: { deletedAt: null } },
-      include: { user: true, classes: true },
+      include: {
+        user: true,
+        classes: { include: { teacher: { include: { user: true } } } },
+        guardian: true,
+      },
     });
 
     if (!student) {
       return res.status(404).json({ error: 'No student profile found for this account' });
     }
+
+    const assignedClass = student.classes[0] ?? null;
+    const classTeacher = assignedClass?.teacher ?? null;
+
+    const photoUrl = student.photoUrl ? await getInlineSasUrl(student.photoUrl) : null;
 
     return res.status(200).json({
       id: student.id,
@@ -60,10 +104,202 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
       olYear: student.olYear,
       alYear: student.alYear,
       email: student.user.email,
-      assignedClass: student.classes[0]?.name ?? null,
+      assignedClass: assignedClass?.name ?? null,
+      academicYear: assignedClass?.year ?? null,
+      status: student.status,
+      photoUrl,
+      admissionDate: student.dateOfAdmission,
+      updatedAt: student.updatedAt,
+      guardian: student.guardian
+        ? {
+            guardianName: student.guardian.guardianName,
+            primaryPhone: student.guardian.primaryPhone,
+            emergencyContactPhone: student.guardian.emergencyContactPhone,
+          }
+        : null,
+      classTeacher: classTeacher
+        ? {
+            fullName: classTeacher.fullName,
+            phone: classTeacher.phone,
+            email: classTeacher.user.email,
+          }
+        : null,
     });
   } catch (err) {
     console.error('Error fetching student profile:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
+  try {
+    const parsed = updateMyProfileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+    }
+
+    const { address, nicNumber, email } = parsed.data;
+
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'No student profile found for this account' });
+    }
+
+    if (email !== undefined) {
+      const normalizedEmail = email.trim().toLowerCase();
+      const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (existing && existing.id !== req.user!.id) {
+        return res.status(409).json({ error: 'Email already in use' });
+      }
+    }
+
+    try {
+      await prisma.$transaction([
+        prisma.student.update({
+          where: { id: student.id },
+          data: {
+            ...(address !== undefined && { address }),
+            ...(nicNumber !== undefined && { nicNumber }),
+          },
+        }),
+        ...(email !== undefined
+          ? [prisma.user.update({ where: { id: req.user!.id }, data: { email: email.trim().toLowerCase() } })]
+          : []),
+      ]);
+    } catch (txErr: any) {
+      if (txErr?.code === 'P2002') {
+        return res.status(409).json({ error: 'NIC number or email already in use' });
+      }
+      throw txErr;
+    }
+
+    return res.status(200).json({ message: 'Profile updated successfully' });
+  } catch (err) {
+    console.error('Error updating student profile:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/me/guardian', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
+  try {
+    const parsed = upsertGuardianSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'No student profile found for this account' });
+    }
+
+    const { guardianName, primaryPhone, emergencyContactPhone } = parsed.data;
+
+    const guardian = await prisma.guardian.upsert({
+      where: { studentId: student.id },
+      update: { guardianName, primaryPhone, emergencyContactPhone },
+      create: { studentId: student.id, guardianName, primaryPhone, emergencyContactPhone },
+    });
+
+    return res.status(200).json({
+      guardianName: guardian.guardianName,
+      primaryPhone: guardian.primaryPhone,
+      emergencyContactPhone: guardian.emergencyContactPhone,
+    });
+  } catch (err) {
+    console.error('Error updating guardian details:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/me/photo', requireRole(['STUDENT']), uploadPhotoFile, async (req: AuthRequest, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No photo uploaded, or file type not allowed (JPEG, PNG, WebP only)' });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'No student profile found for this account' });
+    }
+
+    const previousPhotoKey = student.photoUrl;
+    const blobKey = `avatars/student-${student.id}-${randomUUID()}${path.extname(req.file.originalname)}`;
+    await uploadBlob(blobKey, req.file.buffer, req.file.mimetype);
+
+    try {
+      await prisma.student.update({ where: { id: student.id }, data: { photoUrl: blobKey } });
+    } catch (err) {
+      await deleteBlob(blobKey).catch((cleanupErr) =>
+        console.error('Failed to compensate blob after DB update failure:', cleanupErr)
+      );
+      throw err;
+    }
+
+    if (previousPhotoKey) {
+      await deleteBlob(previousPhotoKey).catch((err) =>
+        console.error('Failed to delete previous avatar blob:', err)
+      );
+    }
+
+    const photoUrl = await getInlineSasUrl(blobKey);
+    return res.status(200).json({ photoUrl });
+  } catch (err) {
+    console.error('Error uploading student photo:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/me/certificates', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'No student profile found for this account' });
+    }
+
+    const certificates = await prisma.characterCertificate.findMany({
+      where: { studentId: student.id },
+      select: { id: true, issuedAt: true, characterGrade: true },
+      orderBy: { issuedAt: 'desc' },
+    });
+
+    return res.status(200).json(certificates);
+  } catch (err) {
+    console.error('Error listing own certificates:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Deliberately its own /me/... route (not nested under a generic
+// certificate-download endpoint) so the STUDENT role guard applies before
+// the ownership check below — same route-ordering rationale as the other
+// /me/* routes in this file.
+router.get('/me/certificates/:id/pdf', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'No student profile found for this account' });
+    }
+
+    const certificate = await findCertificateByIdParam(req.params.id as string);
+    if (!certificate || certificate.studentId !== student.id) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+
+    streamCertificatePdf(certificate, res);
+  } catch (err) {
+    console.error('Error fetching own certificate PDF:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
