@@ -114,19 +114,29 @@ export const issueCertificate = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const getCertificatePdf = async (req: Request, res: Response) => {
+/**
+ * Looks up a certificate by its (URL-encoded) id param. Shared by the
+ * principal-facing and student-facing PDF routes so ownership checks can be
+ * layered on by each caller before streaming the PDF.
+ */
+export async function findCertificateByIdParam(rawId: string) {
+  const decodedId = decodeURIComponent(rawId);
+  return prisma.characterCertificate.findUnique({ where: { id: decodedId } });
+}
+
+type CharacterCertificateRecord = NonNullable<
+  Awaited<ReturnType<typeof findCertificateByIdParam>>
+>;
+
+/**
+ * Streams the certificate PDF onto `res`. Extracted from getCertificatePdf so
+ * the student-facing "download my own certificate" route (students.ts) can
+ * reuse the exact same rendering after its own ownership check, instead of
+ * duplicating this ~100-line PDFKit layout.
+ */
+export function streamCertificatePdf(certificate: CharacterCertificateRecord, res: Response) {
   try {
-    const { id } = req.params;
-    const decodedId = decodeURIComponent(id as string);
-
-    const certificate = await prisma.characterCertificate.findUnique({
-      where: { id: decodedId },
-    });
-
-    if (!certificate) {
-      return res.status(404).json({ error: 'Certificate not found' });
-    }
-
+    const decodedId = certificate.id;
     const snapshot = certificate.contentSnapshot as any;
 
     const doc = new PDFDocument({ margin: 50 });
@@ -218,8 +228,23 @@ export const getCertificatePdf = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error generating PDF:', error);
     if (!res.headersSent) {
-      return res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ error: 'Internal server error' });
     }
+  }
+}
+
+export const getCertificatePdf = async (req: Request, res: Response) => {
+  try {
+    const certificate = await findCertificateByIdParam(req.params.id as string);
+
+    if (!certificate) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+
+    streamCertificatePdf(certificate, res);
+  } catch (error) {
+    console.error('Error fetching certificate:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
