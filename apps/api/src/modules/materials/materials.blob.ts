@@ -143,3 +143,35 @@ export async function getDownloadSasUrl(key: string, downloadFilename: string): 
   const blockBlobClient = containerClient.getBlockBlobClient(key);
   return `${blockBlobClient.url}?${sasQueryParameters.toString()}`;
 }
+
+/**
+ * Same short-lived read-only User Delegation SAS as getDownloadSasUrl, but
+ * without a Content-Disposition override — the blob's stored content type
+ * (set at upload) decides inline vs attachment. Used where the URL is
+ * embedded directly (e.g. an <img src>) and must render rather than prompt
+ * a download.
+ */
+export async function getInlineSasUrl(key: string): Promise<string> {
+  const { blobServiceClient, containerClient } = getClients();
+  const now = new Date();
+  const startsOn = new Date(now.valueOf() - CLOCK_SKEW_MS);
+  const expiresOn = new Date(now.valueOf() + SAS_TTL_MS);
+
+  const userDelegationKey = await getCachedUserDelegationKey(blobServiceClient);
+
+  const sasQueryParameters = generateBlobSASQueryParameters(
+    {
+      containerName: containerClient.containerName,
+      blobName: key,
+      permissions: BlobSASPermissions.parse('r'),
+      protocol: SASProtocol.Https,
+      startsOn,
+      expiresOn,
+    },
+    userDelegationKey,
+    blobServiceClient.accountName
+  );
+
+  const blockBlobClient = containerClient.getBlockBlobClient(key);
+  return `${blockBlobClient.url}?${sasQueryParameters.toString()}`;
+}
