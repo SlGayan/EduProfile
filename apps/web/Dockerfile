@@ -4,6 +4,7 @@ WORKDIR /app
 # Install dependencies
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
+COPY apps/api/prisma ./apps/api/prisma/
 COPY apps/web/package.json ./apps/web/
 COPY apps/web/tsconfig.json ./apps/web/
 
