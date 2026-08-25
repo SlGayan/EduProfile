@@ -12,6 +12,7 @@ import {
   User,
   Award,
   Trophy,
+  ScrollText,
   School,
   BarChart3,
   TrendingUp,
@@ -54,6 +55,7 @@ const studentNavItems = [
   { href: "/student/profile", label: "My Profile", icon: User },
   { href: "/student/marks", label: "My Marks", icon: Award },
   { href: "/student/activities", label: "My Activities", icon: Trophy },
+  { href: "/student/certificates", label: "My Certificates", icon: ScrollText },
   { href: "/student/materials", label: "Study Materials", icon: FileText },
 ]
 
