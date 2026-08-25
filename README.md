@@ -94,11 +94,11 @@ The CORS rule in that template is load-bearing and easy to overlook: downloads r
 
 2. **Install dependencies**
    ```bash
-   # Install API dependencies
-   cd apps/api && npm install
-
-   # Install web app dependencies
-   cd ../web && npm install
+   # This is an npm workspace (apps/*) — install once from the repo root.
+   # Do NOT run npm install separately inside apps/web or apps/api: that
+   # creates duplicate node_modules/package-lock.json per app, which fight
+   # the root install and silently break root-level dependency overrides.
+   npm install
    ```
 
 3. **Database Setup**
