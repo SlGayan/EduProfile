@@ -31,6 +31,11 @@ model User {
   issuedCertificates CharacterCertificate[]
 }
 
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model Student {
   id          Int        @id @default(autoincrement())
   userId      Int        @unique
@@ -46,18 +51,34 @@ model Student {
   dateOfAdmission DateTime?
   admissionGrade  String?
   attendancePercentage Float?
+  photoUrl    String?
+  status      StudentStatus @default(ACTIVE)
   classes     Class[]
   termMarks   TermMark[]
   activities  ExtracurricularActivity[]
   certificates CharacterCertificate[]
+  guardian    Guardian?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+}
+
+model Guardian {
+  id                    Int      @id @default(autoincrement())
+  studentId             Int      @unique
+  student               Student  @relation(fields: [studentId], references: [id])
+  guardianName          String
+  primaryPhone          String
+  emergencyContactPhone String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Teacher {
   id             Int             @id @default(autoincrement())
   userId         Int             @unique
   user           User            @relation(fields: [userId], references: [id])
+  fullName       String?
+  phone          String?
   classes        Class[]
   studyMaterials StudyMaterial[]
   createdAt      DateTime        @default(now())
