@@ -114,11 +114,7 @@ export default function LoginPage() {
               <p id="email-error" role="alert" className="text-sm text-destructive">
                 {errors.email.message}
               </p>
-            ) : (
-              <p id="email-hint" className="text-xs text-muted-foreground">
-                Use your school email ending in {REQUIRED_EMAIL_DOMAIN}
-              </p>
-            )}
+            ) : null}
           </div>
 
           <div className="space-y-2">
