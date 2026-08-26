@@ -40,6 +40,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MoreHorizontal, Plus, Loader2 } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
+import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 
 type ApiRole = "STUDENT" | "TEACHER" | "PRINCIPAL" | "ADMINISTRATOR"
 
@@ -102,11 +103,18 @@ function UserTable({
   onEdit: (user: ApiUser) => void
   onDeactivate: (user: ApiUser) => void
 }) {
+  const [page, setPage] = useState(1)
+
   if (users.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">No users found.</p>
   }
 
+  const pageCount = Math.max(1, Math.ceil(users.length / TABLE_PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pagedUsers = users.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE)
+
   return (
+    <>
     <Table>
       <TableHeader>
         <TableRow>
@@ -117,7 +125,7 @@ function UserTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {users.map((user) => (
+        {pagedUsers.map((user) => (
           <TableRow key={user.id}>
             <TableCell>{user.email}</TableCell>
             <TableCell>
@@ -149,6 +157,10 @@ function UserTable({
         ))}
       </TableBody>
     </Table>
+    <div className="px-4 pb-4">
+      <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
+    </div>
+    </>
   )
 }
 
