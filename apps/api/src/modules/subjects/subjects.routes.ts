@@ -4,6 +4,6 @@ import { listSubjects } from './subjects.controller.js';
 
 const router = Router();
 
-router.get('/', verifyToken, requireRole(['TEACHER', 'ADMINISTRATOR']), listSubjects);
+router.get('/', verifyToken, requireRole(['TEACHER', 'ADMINISTRATOR', 'PRINCIPAL']), listSubjects);
 
 export default router;

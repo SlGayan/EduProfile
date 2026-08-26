@@ -63,6 +63,7 @@ import {
   School,
   UserMinus,
   UserPlus,
+  BookOpen,
 } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { getCurrentUser } from "@/lib/auth"
@@ -94,6 +95,22 @@ interface ApiClass {
 
 interface ApiClassDetail extends ApiClass {
   students: ApiStudentRecord[]
+}
+
+// Row shape from GET /api/classes/:id/subject-assignments
+interface ApiSubjectAssignment {
+  id: number
+  teacherId: number
+  subjectId: number
+  classId: number
+  teacher: { id: number; user: { email: string } }
+  subject: { id: number; name: string }
+}
+
+// Row shape from GET /api/subjects (a raw array, not { subjects: [...] })
+interface ApiSubjectOption {
+  id: string
+  name: string
 }
 
 // User records from GET /api/users (includes nested teacher/student profile ids)
@@ -149,6 +166,19 @@ async function fetchUsers(): Promise<ApiUser[]> {
   if (!res.ok) throw new Error("Failed to fetch users")
   const data = await res.json()
   return data.users
+}
+
+async function fetchClassSubjectAssignments(classId: number): Promise<ApiSubjectAssignment[]> {
+  const res = await apiFetch(`/api/classes/${classId}/subject-assignments`)
+  if (!res.ok) throw new Error("Failed to fetch subject assignments")
+  const data = await res.json()
+  return data.assignments
+}
+
+async function fetchSubjects(): Promise<ApiSubjectOption[]> {
+  const res = await apiFetch("/api/subjects")
+  if (!res.ok) throw new Error("Failed to fetch subjects")
+  return res.json()
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +405,240 @@ function RosterModal({
 }
 
 // ---------------------------------------------------------------------------
+// Subject assignments modal
+// ---------------------------------------------------------------------------
+
+function SubjectAssignmentsModal({
+  classItem,
+  teachers,
+  open,
+  onClose,
+}: {
+  classItem: ApiClass | null
+  teachers: ApiUser[]
+  open: boolean
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>("")
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("")
+  const [warningMessage, setWarningMessage] = useState<string | null>(null)
+
+  const { data: assignments = [], isLoading: loadingAssignments, isError: assignmentsError } = useQuery({
+    queryKey: ["class-subject-assignments", classItem?.id],
+    queryFn: () => fetchClassSubjectAssignments(classItem!.id),
+    enabled: open && classItem !== null,
+  })
+
+  const { data: subjects = [], isError: subjectsError, isLoading: subjectsLoading } = useQuery({
+    queryKey: ["subjects"],
+    queryFn: fetchSubjects,
+    enabled: open,
+  })
+
+  // Reset local state when the modal closes or switches to a different class,
+  // since this component stays mounted across different classItem values.
+  useEffect(() => {
+    setSelectedTeacherId("")
+    setSelectedSubjectId("")
+    setWarningMessage(null)
+  }, [open, classItem?.id])
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch("/api/teacher-subject-assignments", {
+        method: "POST",
+        body: JSON.stringify({
+          teacherId: Number(selectedTeacherId),
+          subjectId: Number(selectedSubjectId),
+          classId: classItem!.id,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to add assignment")
+      return data as { assignment: unknown; warning?: string }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["class-subject-assignments", classItem?.id] })
+      toast.success("Teacher assigned to subject")
+      if (data.warning) {
+        setWarningMessage(data.warning)
+        toast.warning(data.warning)
+      } else {
+        setWarningMessage(null)
+      }
+      setSelectedTeacherId("")
+      setSelectedSubjectId("")
+    },
+    onError: (err: Error) => {
+      setWarningMessage(null)
+      toast.error(err.message)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(`/api/teacher-subject-assignments/${id}`, {
+        method: "DELETE",
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to remove assignment")
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["class-subject-assignments", classItem?.id] })
+      toast.success("Assignment removed")
+      setWarningMessage(null)
+    },
+    onError: (err: Error) => {
+      // 404 (already removed) still means the list is stale — refresh it too.
+      queryClient.invalidateQueries({ queryKey: ["class-subject-assignments", classItem?.id] })
+      toast.error(err.message)
+      setWarningMessage(null)
+    },
+  })
+
+  const canSubmit = selectedTeacherId !== "" && selectedSubjectId !== ""
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-full sm:max-w-2xl mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
+        <DialogHeader>
+          <DialogTitle>Subject Teachers — {classItem?.name}</DialogTitle>
+          <DialogDescription>
+            Assign teachers to teach subjects in this class.
+          </DialogDescription>
+        </DialogHeader>
+
+        {warningMessage && (
+          <Badge
+            variant="outline"
+            className="w-fit border-amber-600 text-amber-600 dark:border-amber-400 dark:text-amber-400"
+          >
+            {warningMessage}
+          </Badge>
+        )}
+
+        {/* Current assignments */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Current Assignments</h3>
+          {loadingAssignments ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </div>
+          ) : assignmentsError ? (
+            <p className="text-sm text-destructive py-4 text-center">
+              Failed to load subject assignments.
+            </p>
+          ) : assignments.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No subject assignments yet.
+            </p>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Teacher</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead className="w-[80px]" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {assignments.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell>{a.teacher.user.email}</TableCell>
+                      <TableCell>{a.subject.name}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteMutation.mutate(a.id)}
+                        >
+                          <UserMinus className="h-4 w-4" />
+                          <span className="sr-only">
+                            Remove {a.teacher.user.email} from {a.subject.name}
+                          </span>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+
+        {/* Add assignment */}
+        <div className="space-y-2 border-t pt-4">
+          <h3 className="text-sm font-semibold">Add Teacher to Subject</h3>
+          {subjectsError && (
+            <p className="text-xs text-destructive">Failed to load subjects</p>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex-1">
+              <Label htmlFor="sa-teacher" className="sr-only">Teacher</Label>
+              <Select
+                value={selectedTeacherId}
+                onValueChange={setSelectedTeacherId}
+                disabled={createMutation.isPending}
+              >
+                <SelectTrigger id="sa-teacher">
+                  <SelectValue placeholder="Select teacher" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teachers.map((t) => (
+                    <SelectItem key={t.teacher!.id} value={String(t.teacher!.id)}>
+                      {t.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Label htmlFor="sa-subject" className="sr-only">Subject</Label>
+              <Select
+                value={selectedSubjectId}
+                onValueChange={setSelectedSubjectId}
+                disabled={subjectsError || subjectsLoading || createMutation.isPending}
+              >
+                <SelectTrigger id="sa-subject">
+                  <SelectValue placeholder="Select subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              disabled={!canSubmit || createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Add
+            </Button>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -395,6 +659,7 @@ export default function ClassManagementPage() {
   const [editClass, setEditClass] = useState<ApiClass | null>(null)
   const [deleteClass, setDeleteClass] = useState<ApiClass | null>(null)
   const [rosterClass, setRosterClass] = useState<ApiClass | null>(null)
+  const [assignmentsClass, setAssignmentsClass] = useState<ApiClass | null>(null)
 
   // Teacher select state (uncontrolled relative to RHF since shadcn Select doesn't use register)
   const [createTeacherId, setCreateTeacherId] = useState<string>("none")
@@ -593,6 +858,10 @@ export default function ClassManagementPage() {
                           <Users className="mr-2 h-4 w-4" />
                           Manage Roster
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAssignmentsClass(cls)}>
+                          <BookOpen className="mr-2 h-4 w-4" />
+                          Subject Teachers
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
@@ -765,6 +1034,14 @@ export default function ClassManagementPage() {
         classItem={rosterClass}
         open={!!rosterClass}
         onClose={() => setRosterClass(null)}
+      />
+
+      {/* Subject assignments modal */}
+      <SubjectAssignmentsModal
+        classItem={assignmentsClass}
+        teachers={teachers}
+        open={!!assignmentsClass}
+        onClose={() => setAssignmentsClass(null)}
       />
     </div>
   )

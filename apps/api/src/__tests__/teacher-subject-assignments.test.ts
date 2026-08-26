@@ -278,4 +278,31 @@ describe('Teacher subject assignment endpoints', () => {
       await prisma.user.delete({ where: { id: orphanUser.id } });
     }
   });
+
+  describe('GET /api/subjects role gate', () => {
+    it('allows PRINCIPAL, ADMINISTRATOR, and TEACHER, and rejects STUDENT', async () => {
+      const principalRes = await request(app)
+        .get('/api/subjects')
+        .set('Authorization', `Bearer ${principalToken}`);
+      expect(principalRes.status).toBe(200);
+      expect(Array.isArray(principalRes.body)).toBe(true);
+
+      const adminRes = await request(app)
+        .get('/api/subjects')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(adminRes.status).toBe(200);
+      expect(Array.isArray(adminRes.body)).toBe(true);
+
+      const teacherRes = await request(app)
+        .get('/api/subjects')
+        .set('Authorization', `Bearer ${teacherToken}`);
+      expect(teacherRes.status).toBe(200);
+      expect(Array.isArray(teacherRes.body)).toBe(true);
+
+      const studentRes = await request(app)
+        .get('/api/subjects')
+        .set('Authorization', `Bearer ${studentToken}`);
+      expect(studentRes.status).toBe(403);
+    });
+  });
 });
