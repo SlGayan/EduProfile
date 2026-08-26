@@ -47,6 +47,15 @@ interface StudentSearchResponse {
   }
 }
 
+class StudentSearchError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function fetchStudentSearch(queryParams: string): Promise<StudentSearchResponse> {
   const response = await apiFetch(`/api/students/search?${queryParams}`)
   if (!response.ok) {
@@ -59,7 +68,7 @@ async function fetchStudentSearch(queryParams: string): Promise<StudentSearchRes
     } catch {
       // no JSON body
     }
-    throw new Error(message)
+    throw new StudentSearchError(message, response.status)
   }
   const data = await response.json()
   if (!Array.isArray(data?.students)) {
@@ -117,6 +126,12 @@ export default function StudentSearch({ onSelectStudent }: StudentSearchProps = 
     queryKey: ["students", submittedFilters],
     queryFn: () => fetchStudentSearch(buildQueryParams(submittedFilters)),
     enabled: isAuthorized && hasSearched,
+    // A 4xx (e.g. no filters submitted) is never transient, so retrying it
+    // just re-sends the same bad request — fires 4 identical 400s instead of 1.
+    retry: (failureCount, error) => {
+      if (error instanceof StudentSearchError && error.status >= 400 && error.status < 500) return false
+      return failureCount < 3
+    },
   })
   const students = data?.students
 
