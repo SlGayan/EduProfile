@@ -6,6 +6,7 @@ import {
   schoolAnalyticsQuerySchema,
   classAnalyticsQuerySchema,
 } from '../../validators/analyticsValidators.js';
+import { READ_TX_OPTIONS, round2 } from '../../lib/queryHelpers.js';
 
 // Per-module client, matching every other file in apps/api/src. No shared
 // singleton exists in this codebase; introducing one is out of scope here.
@@ -21,25 +22,6 @@ type AuthzFailure = { status: number; error: string };
  */
 const ROLE_ADMIN = 'admin';
 const ROLE_PRINCIPAL = 'principal';
-
-/**
- * Reads are wrapped in a transaction so the several queries behind one response
- * observe a single database snapshot — otherwise a concurrent `marks/import`
- * commit lands between the aggregate and the detail query and the two sections
- * of the same JSON body disagree. The timeout is raised well above Prisma's 5s
- * default because these aggregates are deliberately unbounded (see the Story
- * 10.1 review decision on scale).
- */
-const READ_TX_OPTIONS = {
-  timeout: 20_000,
-  maxWait: 5_000,
-  isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
-} as const;
-
-/** Averages are money-free ratios; two decimals is enough for every chart. */
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
 
 /**
  * Sorting is pinned to a fixed locale. A bare `localeCompare()` follows the
