@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/authMiddleware.js';
 import { createClassSchema, updateClassSchema, addStudentSchema, assignTeacherSchema } from '../validators/classValidators.js';
+import { listAssignmentsForClass } from '../modules/teacherSubjectAssignments/teacherSubjectAssignments.controller.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -128,6 +129,9 @@ router.delete('/:id', async (req: AuthRequest, res) => {
 
         return res.status(200).json({ message: 'Class successfully deleted' });
     } catch (err) {
+        if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2003') {
+            return res.status(409).json({ error: 'Cannot delete class with active subject-teaching assignments' });
+        }
         console.error('Error deleting class:', err);
         return res.status(500).json({ error: 'Failed to delete class' });
     }
@@ -219,5 +223,7 @@ router.delete('/:id/students/:studentId', async (req: AuthRequest, res) => {
         return res.status(500).json({ error: 'Failed to remove student from class' });
     }
 });
+
+router.get('/:id/subject-assignments', listAssignmentsForClass);
 
 export default router;

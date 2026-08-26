@@ -55,34 +55,58 @@ model Student {
 }
 
 model Teacher {
-  id             Int             @id @default(autoincrement())
-  userId         Int             @unique
-  user           User            @relation(fields: [userId], references: [id])
-  classes        Class[]
-  studyMaterials StudyMaterial[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 Int                         @id @default(autoincrement())
+  userId             Int                         @unique
+  user               User                        @relation(fields: [userId], references: [id])
+  classes            Class[]
+  studyMaterials     StudyMaterial[]
+  subjectAssignments TeacherSubjectAssignment[]
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
 }
 
 model Class {
-  id             Int             @id @default(autoincrement())
-  name           String
-  year           Int?
-  teacherId      Int?
-  teacher        Teacher?        @relation(fields: [teacherId], references: [id])
-  students       Student[]
-  studyMaterials StudyMaterial[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 Int                         @id @default(autoincrement())
+  name               String
+  year               Int?
+  teacherId          Int?
+  teacher            Teacher?                    @relation(fields: [teacherId], references: [id])
+  students           Student[]
+  studyMaterials     StudyMaterial[]
+  subjectAssignments TeacherSubjectAssignment[]
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
 }
 
 model Subject {
-  id             Int             @id @default(autoincrement())
-  name           String          @unique
-  termMarks      TermMark[]
-  studyMaterials StudyMaterial[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 Int                         @id @default(autoincrement())
+  name               String                      @unique
+  termMarks          TermMark[]
+  studyMaterials     StudyMaterial[]
+  teacherAssignments TeacherSubjectAssignment[]
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+}
+
+// Represents a teacher teaching a specific Subject within a specific Class,
+// independent of Class.teacherId ownership. `classId` implicitly carries the
+// year via the Class row it references, so no separate `year` field is
+// needed. See Story 2.6 / Epic 12 Story 12.3 (downstream authorization).
+model TeacherSubjectAssignment {
+  id        Int      @id @default(autoincrement())
+  teacherId Int
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  subjectId Int
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  classId   Int
+  class     Class    @relation(fields: [classId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teacherId, subjectId, classId])
+  @@index([teacherId])
+  @@index([subjectId])
+  @@index([classId])
 }
 
 model TermMark {
