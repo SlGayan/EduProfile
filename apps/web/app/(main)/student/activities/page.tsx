@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Trophy, Plus } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { formatDateRange, type Activity } from "@/lib/activities"
+import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -322,6 +323,8 @@ function StatusBadge({ status }: { status?: string }) {
 }
 
 export default function StudentActivitiesPage() {
+  const [page, setPage] = useState(1)
+
   const {
     data: activities,
     isLoading,
@@ -331,6 +334,13 @@ export default function StudentActivitiesPage() {
     queryFn: fetchMyActivities,
     retry: false,
   })
+
+  const pageCount = Math.max(1, Math.ceil((activities?.length ?? 0) / TABLE_PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pagedActivities = (activities ?? []).slice(
+    (currentPage - 1) * TABLE_PAGE_SIZE,
+    currentPage * TABLE_PAGE_SIZE
+  )
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -380,7 +390,7 @@ export default function StudentActivitiesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activities.map((activity) => (
+                  {pagedActivities.map((activity) => (
                     <TableRow key={activity.id}>
                       <TableCell className="font-medium">
                         <div>{activity.activityName}</div>
@@ -403,6 +413,7 @@ export default function StudentActivitiesPage() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
             </div>
           )}
         </CardContent>

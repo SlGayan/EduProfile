@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, FileCheck, Check, X, MessageSquareWarning, UserCog } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { formatDateRange, type Activity } from "@/lib/activities"
+import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -126,6 +127,7 @@ function ActivitiesTab() {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [actionType, setActionType] = useState<"APPROVE" | "REJECT" | "NEEDS_CORRECTION">("APPROVE")
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [page, setPage] = useState(1)
 
   const {
     data: activities,
@@ -142,6 +144,13 @@ function ActivitiesTab() {
     setActionType(action)
     setDialogOpen(true)
   }
+
+  const pageCount = Math.max(1, Math.ceil((activities?.length ?? 0) / TABLE_PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pagedActivities = (activities ?? []).slice(
+    (currentPage - 1) * TABLE_PAGE_SIZE,
+    currentPage * TABLE_PAGE_SIZE
+  )
 
   return (
     <>
@@ -186,7 +195,7 @@ function ActivitiesTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activities.map((activity) => (
+                  {pagedActivities.map((activity) => (
                     <TableRow key={activity.id}>
                       <TableCell className="font-medium">
                         {activity.studentName}
@@ -224,6 +233,7 @@ function ActivitiesTab() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
             </div>
           )}
         </CardContent>

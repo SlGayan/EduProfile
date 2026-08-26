@@ -21,6 +21,7 @@ import {
 import { AlertCircle, Info } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { toast } from "sonner"
+import { formatDate } from "@/lib/studentSearch"
 
 interface StudentProfile {
   id: number
@@ -246,7 +247,7 @@ export default function StudentProfilePage() {
             </div>
             <div className="space-y-1">
               <dt className="text-sm font-medium text-muted-foreground">Date of Birth</dt>
-              <dd className="text-base font-medium">{profile?.dateOfBirth}</dd>
+              <dd className="text-base font-medium">{profile && formatDate(profile.dateOfBirth)}</dd>
             </div>
             <div className="space-y-1">
               <dt className="text-sm font-medium text-muted-foreground">NIC Number</dt>

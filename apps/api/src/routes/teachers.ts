@@ -7,6 +7,7 @@ import {
   reviewProfileRequest,
 } from '../modules/profileRequests/profileRequests.controller.js';
 import { updateTeacherSelfSchema } from '../validators/teacherValidators.js';
+import { getTeacherDashboard } from '../modules/teacher-dashboard/teacher-dashboard.controller.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -153,6 +154,8 @@ router.get('/me/profile-requests', requireRole(['TEACHER']), listPendingProfileR
 // the `/` list route below purely for grouping with the other `/me`-adjacent
 // routes above, not because ordering matters here.
 router.patch('/profile-requests/:id', requireRole(['TEACHER']), reviewProfileRequest);
+
+router.get('/me/dashboard', requireRole(['TEACHER']), getTeacherDashboard);
 
 router.get('/', requireRole(['ADMINISTRATOR', 'PRINCIPAL']), async (req: AuthRequest, res) => {
   try {

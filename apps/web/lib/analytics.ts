@@ -397,6 +397,33 @@ export async function fetchClassAnalytics(
   return (await response.json()) as ClassAnalytics
 }
 
+/**
+ * `GET /api/teachers/me/dashboard` — role TEACHER.
+ *
+ * `classId`/`className` are `null` when the teacher has no class assigned yet.
+ * `classAverage` is `null` when no marks are recorded in scope — a real average
+ * of 0 is a different fact and still renders as "0". `scope` is the (year,
+ * term) the stats were computed over: the most recently recorded period for
+ * the class unless overridden.
+ */
+export interface TeacherDashboard {
+  classId: number | null
+  className: string | null
+  studentCount: number
+  marksPending: number
+  classAverage: number | null
+  needsSupport: number
+  scope: { year: number | null; term: number | null }
+}
+
+export async function fetchTeacherDashboard(): Promise<TeacherDashboard> {
+  const response = await apiFetch("/api/teachers/me/dashboard")
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to load your dashboard"))
+  }
+  return (await response.json()) as TeacherDashboard
+}
+
 /** `GET /api/analytics/school` — PRINCIPAL, ADMINISTRATOR. No `grade` param exists. */
 export async function fetchSchoolAnalytics(
   filters: { classId?: number | null; year?: number | null } = {}
