@@ -15,6 +15,7 @@ describe('Teacher subject assignment endpoints', () => {
   let principalToken: string;
   let teacherToken: string;
   let studentToken: string;
+  let teacher2Token: string;
 
   let teacherId: number;
   let subjectId: number;
@@ -25,6 +26,7 @@ describe('Teacher subject assignment endpoints', () => {
     principalToken = await login('principal@edu.com');
     teacherToken = await login('teacher@edu.com');
     studentToken = await login('student@edu.com');
+    teacher2Token = await login('teacher2@edu.com');
 
     const teacherUser = await prisma.user.findUniqueOrThrow({ where: { email: 'teacher@edu.com' } });
     const teacher = await prisma.teacher.findUniqueOrThrow({ where: { userId: teacherUser.id } });
@@ -209,5 +211,71 @@ describe('Teacher subject assignment endpoints', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ message: 'Class successfully deleted' });
+  });
+
+  it("returns the authenticated teacher's own subject assignments", async () => {
+    const assignedClass = await prisma.class.create({ data: { name: 'Me Endpoint Test Class (test)', year: 2025 } });
+    await prisma.teacherSubjectAssignment.create({
+      data: { teacherId, subjectId, classId: assignedClass.id },
+    });
+
+    const res = await request(app)
+      .get('/api/teachers/me/subject-assignments')
+      .set('Authorization', `Bearer ${teacherToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(
+      res.body.some(
+        (a: { classId: string; className: string; subjectId: string; subjectName: string }) =>
+          a.classId === String(assignedClass.id) && a.subjectId === String(subjectId) && !!a.className && !!a.subjectName
+      )
+    ).toBe(true);
+
+    await prisma.teacherSubjectAssignment.deleteMany({ where: { classId: assignedClass.id } });
+    await prisma.class.delete({ where: { id: assignedClass.id } });
+  });
+
+  it('returns an empty array for a teacher with no subject assignments', async () => {
+    const res = await request(app)
+      .get('/api/teachers/me/subject-assignments')
+      .set('Authorization', `Bearer ${teacher2Token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it('rejects non-teacher callers on the me/subject-assignments endpoint', async () => {
+    const adminRes = await request(app)
+      .get('/api/teachers/me/subject-assignments')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(adminRes.status).toBe(403);
+
+    const studentRes = await request(app)
+      .get('/api/teachers/me/subject-assignments')
+      .set('Authorization', `Bearer ${studentToken}`);
+    expect(studentRes.status).toBe(403);
+  });
+
+  it('returns 403 for a TEACHER-role user with no linked Teacher profile', async () => {
+    const bcrypt = await import('bcrypt');
+    const orphanUser = await prisma.user.create({
+      data: {
+        email: 'orphan-teacher-role-test@edu.com',
+        password: await bcrypt.hash('password123', 10),
+        role: 'TEACHER',
+      },
+    });
+
+    try {
+      const orphanToken = await login(orphanUser.email);
+      const res = await request(app)
+        .get('/api/teachers/me/subject-assignments')
+        .set('Authorization', `Bearer ${orphanToken}`);
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({ error: 'Teacher profile not found' });
+    } finally {
+      await prisma.user.delete({ where: { id: orphanUser.id } });
+    }
   });
 });

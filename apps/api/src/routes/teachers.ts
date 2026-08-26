@@ -26,6 +26,41 @@ router.get('/me/classes', requireRole(['TEACHER']), async (req: AuthRequest, res
   }
 });
 
+router.get('/me/subject-assignments', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
+  try {
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      include: {
+        subjectAssignments: {
+          select: {
+            classId: true,
+            subjectId: true,
+            class: { select: { name: true } },
+            subject: { select: { name: true } },
+          },
+          orderBy: [{ class: { name: 'asc' } }, { subject: { name: 'asc' } }],
+        },
+      },
+    });
+
+    if (!teacher) {
+      return res.status(403).json({ error: 'Teacher profile not found' });
+    }
+
+    return res.status(200).json(
+      teacher.subjectAssignments.map((a) => ({
+        classId: String(a.classId),
+        className: a.class.name,
+        subjectId: String(a.subjectId),
+        subjectName: a.subject.name,
+      }))
+    );
+  } catch (err) {
+    console.error('Error fetching teacher subject assignments:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/me/pending-activities', requireRole(['TEACHER']), getPendingActivities);
 
 router.get('/', requireRole(['ADMINISTRATOR', 'PRINCIPAL']), async (req: AuthRequest, res) => {
