@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, FileCheck, Check, X, MessageSquareWarning } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { formatDateRange, type Activity } from "@/lib/activities"
+import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -121,6 +122,7 @@ export default function PendingActivitiesPage() {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [actionType, setActionType] = useState<"APPROVE" | "REJECT" | "NEEDS_CORRECTION">("APPROVE")
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [page, setPage] = useState(1)
 
   const {
     data: activities,
@@ -137,6 +139,13 @@ export default function PendingActivitiesPage() {
     setActionType(action)
     setDialogOpen(true)
   }
+
+  const pageCount = Math.max(1, Math.ceil((activities?.length ?? 0) / TABLE_PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pagedActivities = (activities ?? []).slice(
+    (currentPage - 1) * TABLE_PAGE_SIZE,
+    currentPage * TABLE_PAGE_SIZE
+  )
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -183,7 +192,7 @@ export default function PendingActivitiesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activities.map((activity) => (
+                  {pagedActivities.map((activity) => (
                     <TableRow key={activity.id}>
                       <TableCell className="font-medium">
                         {activity.studentName}
@@ -221,12 +230,13 @@ export default function PendingActivitiesPage() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
             </div>
           )}
         </CardContent>
       </Card>
 
-      <ReviewActionDialog 
+      <ReviewActionDialog
         activity={selectedActivity} 
         open={dialogOpen} 
         onOpenChange={setDialogOpen}

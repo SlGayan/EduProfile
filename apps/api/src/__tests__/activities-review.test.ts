@@ -13,6 +13,12 @@ async function login(email: string, password = 'password123') {
 describe('Activity submission and review endpoints', () => {
   let studentToken: string;
   let teacherToken: string;
+  // Every test in this suite creates a real ExtracurricularActivity row against
+  // the shared dev database (there is no isolated test DB). Without tracking
+  // and deleting them here, each test run left PENDING activities behind for
+  // student@edu.com, which accumulated into dozens of duplicate rows on
+  // Pending Activities / My Activities over repeated runs.
+  const createdActivityIds: number[] = [];
 
   beforeAll(async () => {
     studentToken = await login('student@edu.com');
@@ -20,6 +26,7 @@ describe('Activity submission and review endpoints', () => {
   });
 
   afterAll(async () => {
+    await prisma.extracurricularActivity.deleteMany({ where: { id: { in: createdActivityIds } } });
     await prisma.$disconnect();
   });
 
@@ -48,6 +55,7 @@ describe('Activity submission and review endpoints', () => {
       });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('PENDING');
+    createdActivityIds.push(Number(res.body.id));
   });
 
   it('requires a teacherNote when requesting a correction', async () => {
@@ -55,6 +63,7 @@ describe('Activity submission and review endpoints', () => {
       .post('/api/students/me/activities')
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ activityName: 'Debate Club', activityType: 'Club', startDate: '2026-01-10' });
+    createdActivityIds.push(Number(created.body.id));
 
     const res = await request(app)
       .patch(`/api/activities/${created.body.id}/status`)
@@ -69,6 +78,7 @@ describe('Activity submission and review endpoints', () => {
       .post('/api/students/me/activities')
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ activityName: 'Science Fair', activityType: 'Competition', startDate: '2026-01-10' });
+    createdActivityIds.push(Number(created.body.id));
 
     const reviewed = await request(app)
       .patch(`/api/activities/${created.body.id}/status`)
@@ -86,10 +96,11 @@ describe('Activity submission and review endpoints', () => {
   });
 
   it("lists a teacher's pending activities for their own class", async () => {
-    await request(app)
+    const created = await request(app)
       .post('/api/students/me/activities')
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ activityName: 'Basketball Team', activityType: 'Sport', startDate: '2026-01-10' });
+    createdActivityIds.push(Number(created.body.id));
 
     const res = await request(app)
       .get('/api/teachers/me/pending-activities')

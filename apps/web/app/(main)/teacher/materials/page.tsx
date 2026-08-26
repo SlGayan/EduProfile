@@ -329,6 +329,7 @@ export default function TeacherMaterialsPage() {
                   <p className="text-xs text-destructive">Failed to load classes.</p>
                 ) : (
                   <Select
+                    name="classId"
                     value={classId}
                     onValueChange={setClassId}
                     disabled={classesLoading || subjectAssignmentsLoading}
@@ -357,7 +358,7 @@ export default function TeacherMaterialsPage() {
                 {subjectsError ? (
                   <p className="text-xs text-destructive">Failed to load subjects.</p>
                 ) : (
-                  <Select value={subjectId} onValueChange={setSubjectId} disabled={subjectsLoading}>
+                  <Select name="subjectId" value={subjectId} onValueChange={setSubjectId} disabled={subjectsLoading}>
                     <SelectTrigger id="material-subject" className="w-full">
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
@@ -381,6 +382,7 @@ export default function TeacherMaterialsPage() {
               <Label htmlFor="material-file">File</Label>
               <Input
                 id="material-file"
+                name="file"
                 type="file"
                 accept={ALLOWED_MATERIAL_MIME_TYPES.join(",")}
                 className="cursor-pointer w-full"
