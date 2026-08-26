@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import Image from "next/image"
 import Link from "next/link"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -18,8 +18,10 @@ import { login } from "@/lib/auth"
 import { useAuthStore } from "@/lib/useAuthStore"
 import { SESSION_EXPIRED_FLAG } from "@/lib/apiFetch"
 
+const REQUIRED_EMAIL_DOMAIN = "@edu.com"
+
 const loginSchema = z.object({
-  email: z.string().email("Invalid email format").endsWith("@edu.com", "Invalid email format"),
+  email: z.string().email("Invalid email format").endsWith(REQUIRED_EMAIL_DOMAIN, "Invalid email format"),
   password: z.string().min(1, "Password is required"),
 })
 
@@ -73,9 +75,10 @@ export default function LoginPage() {
       const e = err as Error
       toast({ title: "Login failed", description: e?.message || "Network error" })
 
-      if (e?.message?.toLowerCase().includes("password")) {
+      const normalized = e?.message?.toLowerCase() ?? ""
+      if (normalized.includes("password")) {
         setError("password", { message: e.message })
-      } else if (e?.message?.toLowerCase().includes("email")) {
+      } else if (normalized.includes("email")) {
         setError("email", { message: e.message })
       }
     }
@@ -83,7 +86,7 @@ export default function LoginPage() {
 
   return (
     <Card className="w-full max-w-md sm:p-6" aria-live="polite">
-      <CardHeader className="justify-items-center gap-2">
+      <CardHeader className="justify-items-center gap-3 pb-2">
         <Image
           src="/logo.png"
           alt="EduProfile"
@@ -95,7 +98,7 @@ export default function LoginPage() {
         <CardTitle className="text-2xl text-center sm:text-3xl">EduProfile Login</CardTitle>
       </CardHeader>
 
-      <form onSubmit={handleSubmit(onSubmit)} aria-describedby="login-error">
+      <form onSubmit={handleSubmit(onSubmit)}>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -104,14 +107,14 @@ export default function LoginPage() {
               type="email"
               placeholder="name@edu.com"
               aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? "email-error" : undefined}
+              aria-describedby={errors.email ? "email-error" : "email-hint"}
               {...register("email")}
             />
-            {errors.email && (
+            {errors.email ? (
               <p id="email-error" role="alert" className="text-sm text-destructive">
                 {errors.email.message}
               </p>
-            )}
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -123,7 +126,7 @@ export default function LoginPage() {
                 placeholder="Enter your password"
                 aria-invalid={!!errors.password}
                 aria-describedby={errors.password ? "password-error" : undefined}
-                className="pr-9"
+                className="pr-9 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
                 {...register("password")}
               />
               <button
@@ -132,7 +135,6 @@ export default function LoginPage() {
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
                 className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
-                tabIndex={-1}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -146,11 +148,12 @@ export default function LoginPage() {
 
         </CardContent>
 
-        <CardFooter className="flex flex-col space-y-4 sm:gap-4">
-          <Button type="submit" className="w-full" disabled={isSubmitting} aria-busy={isSubmitting}>
+        <CardFooter className="flex flex-col">
+          <Button type="submit" className="w-full mt-4" disabled={isSubmitting} aria-busy={isSubmitting}>
+            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
             {isSubmitting ? "Signing in..." : "Log in"}
           </Button>
-          <div className="text-sm text-center text-muted-foreground w-full">
+          <div className="text-sm text-center text-muted-foreground w-full mt-2">
             Don&apos;t have an account?{" "}
             <Link href="/register" className="text-primary hover:underline font-medium">
               Sign up
