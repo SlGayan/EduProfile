@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/authMiddleware.js';
 import { getPendingActivities } from '../modules/activities/activities.controller.js';
+import { getTeacherDashboard } from '../modules/teacher-dashboard/teacher-dashboard.controller.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -62,6 +63,8 @@ router.get('/me/subject-assignments', requireRole(['TEACHER']), async (req: Auth
 });
 
 router.get('/me/pending-activities', requireRole(['TEACHER']), getPendingActivities);
+
+router.get('/me/dashboard', requireRole(['TEACHER']), getTeacherDashboard);
 
 router.get('/', requireRole(['ADMINISTRATOR', 'PRINCIPAL']), async (req: AuthRequest, res) => {
   try {
