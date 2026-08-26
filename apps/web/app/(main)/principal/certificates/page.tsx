@@ -141,7 +141,11 @@ export default function CertificatesListPage() {
           </Table>
         ) : (
           <div className="p-12 text-center">
-            <p className="text-muted-foreground">No certificates found.</p>
+            <p className="text-muted-foreground">
+              {certificates && certificates.length > 0
+                ? "No certificates match your search."
+                : "No certificates found."}
+            </p>
           </div>
         )}
       </div>

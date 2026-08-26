@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ArrowLeft, Check, ChevronRight, FileText, Loader2 } from "lucide-react"
+import { ArrowLeft, Check, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 type CharacterGrade = "GOOD" | "VERY_GOOD" | "EXCELLENT"
@@ -163,7 +163,7 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
             <div><span className="text-muted-foreground block text-xs">Full Name</span> {profile.fullName}</div>
             <div><span className="text-muted-foreground block text-xs">Admission No</span> {profile.admissionNumber || 'N/A'}</div>
             <div><span className="text-muted-foreground block text-xs">Date of Admission</span> {profile.dateOfAdmission ? new Date(profile.dateOfAdmission).toLocaleDateString() : 'N/A'}</div>
-            <div><span className="text-muted-foreground block text-xs">Attendance</span> {profile.attendancePercentage ?? 'N/A'}%</div>
+            <div><span className="text-muted-foreground block text-xs">Attendance</span> {profile.attendancePercentage !== null ? `${profile.attendancePercentage}%` : 'N/A'}</div>
           </div>
         </div>
 
