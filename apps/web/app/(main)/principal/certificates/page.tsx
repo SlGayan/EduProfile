@@ -81,8 +81,11 @@ export default function CertificatesListPage() {
 
       <div className="flex items-center space-x-2">
         <Search className="h-4 w-4 text-muted-foreground" />
-        <Input 
-          placeholder="Search by Ref No, Student Name, or Index..." 
+        <Input
+          id="certificate-search"
+          name="certificateSearch"
+          aria-label="Search certificates by reference number, student name, or index"
+          placeholder="Search by Ref No, Student Name, or Index..."
           className="max-w-md"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}

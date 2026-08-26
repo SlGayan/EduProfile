@@ -175,7 +175,7 @@ export default function StudentSearch({ onSelectStudent }: StudentSearchProps = 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Student & Alumni Search</h1>
+        <h2 className="text-xl font-semibold tracking-tight">Student & Alumni Search</h2>
         <p className="text-muted-foreground">Search for students and alumni using multiple criteria.</p>
       </div>
 
