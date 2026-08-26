@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FileDown, FileText, Search, AlertCircle, Calendar } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 
 interface CertificateStudent {
   fullName: string
@@ -25,6 +26,7 @@ interface Certificate {
 
 export default function CertificatesListPage() {
   const [searchTerm, setSearchTerm] = useState("")
+  const [page, setPage] = useState(1)
   const { toast } = useToast()
 
   const { data: certificates, isLoading, error } = useQuery<Certificate[]>({
@@ -40,6 +42,13 @@ export default function CertificatesListPage() {
     cert.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cert.student.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cert.student.indexNumber.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const pageCount = Math.max(1, Math.ceil((filteredCertificates?.length ?? 0) / TABLE_PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pagedCertificates = (filteredCertificates ?? []).slice(
+    (currentPage - 1) * TABLE_PAGE_SIZE,
+    currentPage * TABLE_PAGE_SIZE
   )
 
   const handleDownload = async (certId: string) => {
@@ -88,7 +97,10 @@ export default function CertificatesListPage() {
           placeholder="Search by Ref No, Student Name, or Index..."
           className="max-w-md"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value)
+            setPage(1)
+          }}
         />
       </div>
 
@@ -110,6 +122,7 @@ export default function CertificatesListPage() {
             </Alert>
           </div>
         ) : filteredCertificates && filteredCertificates.length > 0 ? (
+          <>
           <Table>
             <TableHeader>
               <TableRow>
@@ -121,7 +134,7 @@ export default function CertificatesListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCertificates.map((cert) => (
+              {pagedCertificates.map((cert) => (
                 <TableRow key={cert.id}>
                   <TableCell className="font-medium">{cert.id}</TableCell>
                   <TableCell>{cert.student.fullName}</TableCell>
@@ -142,6 +155,10 @@ export default function CertificatesListPage() {
               ))}
             </TableBody>
           </Table>
+          <div className="px-4 pb-4">
+            <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
+          </div>
+          </>
         ) : (
           <div className="p-12 text-center">
             <p className="text-muted-foreground">
