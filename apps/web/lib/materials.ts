@@ -20,6 +20,13 @@ export interface SubjectOption {
   name: string
 }
 
+export interface SubjectAssignment {
+  classId: string
+  className: string
+  subjectId: string
+  subjectName: string
+}
+
 /**
  * Mirrors apps/api's ALLOWED_MATERIAL_MIME_TYPES exactly (materialValidators.ts)
  * so the file input and any client-side pre-check never accept something the
