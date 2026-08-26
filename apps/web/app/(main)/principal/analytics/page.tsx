@@ -321,10 +321,21 @@ export default function PrincipalAnalyticsPage() {
                   No subject has a recorded average in this scope.
                 </p>
               ) : (
-                <ChartContainer config={chartConfig} className="min-h-64 w-full">
-                  <BarChart data={subjectRows}>
+                <ChartContainer config={chartConfig} className="min-h-80 w-full">
+                  <BarChart data={subjectRows} margin={{ bottom: 48 }}>
                     <CartesianGrid vertical={false} />
-                    <XAxis dataKey="subject" tickLine={false} axisLine={false} />
+                    {/* interval={0} forces every subject to get a tick label —
+                        Recharts' automatic category-axis skipping otherwise drops
+                        whichever label doesn't fit, leaving an unlabeled bar. */}
+                    <XAxis
+                      dataKey="subject"
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      angle={-35}
+                      textAnchor="end"
+                      height={60}
+                    />
                     <YAxis domain={[0, 100]} tickLine={false} axisLine={false} />
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Bar dataKey="average" fill="var(--color-average)" radius={4} />
