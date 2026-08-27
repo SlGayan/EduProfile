@@ -19,6 +19,10 @@ import {
   updateMyActivity,
 } from '../modules/activities/activities.controller.js';
 import { listMyMaterials } from '../modules/materials/materials.controller.js';
+import {
+  submitProfileRequest,
+  listMyProfileRequests,
+} from '../modules/profileRequests/profileRequests.controller.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -57,6 +61,7 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
       indexNumber: student.indexNumber,
       dateOfBirth: student.dateOfBirth,
       address: student.address,
+      phoneNumber: student.phoneNumber,
       nicNumber: student.nicNumber,
       olYear: student.olYear,
       alYear: student.alYear,
@@ -80,6 +85,13 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
 router.get('/me/activities', requireRole(['STUDENT']), listMyActivities);
 router.post('/me/activities', requireRole(['STUDENT']), submitMyActivity);
 router.patch('/me/activities/:id', requireRole(['STUDENT']), updateMyActivity);
+
+// Story 12.2 — same route-ordering rule as /me/activities above: must stay
+// above the `/:id/...` routes at the bottom of this file, or it would match
+// `/:id/activities`-style routes with id="me" and be rejected by their
+// TEACHER/ADMINISTRATOR guard before ever reaching this handler.
+router.get('/me/profile-requests', requireRole(['STUDENT']), listMyProfileRequests);
+router.post('/me/profile-requests', requireRole(['STUDENT']), submitProfileRequest);
 
 // Story 9.4 — the caller's own study materials. Same route-ordering rule as
 // /me/activities above: must stay above the `/:id/...` routes at the bottom

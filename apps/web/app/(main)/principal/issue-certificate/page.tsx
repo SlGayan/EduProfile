@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/apiFetch"
@@ -19,10 +19,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ArrowLeft, Check, Loader2 } from "lucide-react"
+import { ArrowLeft, Check, Loader2, Pencil } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import {
+  extractApiError,
+  fieldFontSize,
+  fieldFontWeight,
+  fieldHeight,
+  fieldTextAlign,
+  fieldWidth,
+  isTemplateLayoutData,
+  TEMPLATE_CANVAS_WIDTH,
+  TEMPLATE_CANVAS_HEIGHT,
+  type BoundFieldKey,
+  type CertificateTemplate,
+} from "@/lib/certificateTemplates"
 
 type CharacterGrade = "GOOD" | "VERY_GOOD" | "EXCELLENT"
+
+const CHARACTER_GRADE_LABELS: Record<CharacterGrade, string> = {
+  EXCELLENT: "Excellent",
+  VERY_GOOD: "Very Good",
+  GOOD: "Good",
+}
 
 interface ProfileActivity {
   id: number
@@ -48,6 +67,73 @@ interface IssueCertificatePayload {
   studentAttributes: string
   reasonForLeaving: string
   academicSummary: string
+  // Forward-compat: sent so the backend can pick it up once certificate
+  // issuance is wired to render from a saved template layout. Today the API
+  // silently ignores unrecognized body fields, so this is a no-op there —
+  // the default layout is always what actually gets issued until that lands.
+  templateId: number | null
+}
+
+function TemplatePreview({
+  template,
+  resolveValue,
+}: {
+  template: CertificateTemplate
+  resolveValue: (key: BoundFieldKey) => string
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (width) setScale(width / TEMPLATE_CANVAS_WIDTH)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  if (!isTemplateLayoutData(template.layoutData)) {
+    return (
+      <p className="text-sm text-destructive">
+        This template&apos;s saved layout is in an unexpected format and can&apos;t be previewed.
+      </p>
+    )
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative bg-white border rounded-md overflow-hidden mx-auto w-full"
+      style={{ height: TEMPLATE_CANVAS_HEIGHT * scale }}
+    >
+      <div
+        className="absolute top-0 left-0 origin-top-left"
+        style={{ width: TEMPLATE_CANVAS_WIDTH, height: TEMPLATE_CANVAS_HEIGHT, transform: `scale(${scale})` }}
+      >
+        {template.layoutData.fields.map((field) => (
+          <div
+            key={field.id}
+            className="absolute text-foreground"
+            style={{
+              left: field.x,
+              top: field.y,
+              width: fieldWidth(field),
+              height: field.kind === "text" ? fieldHeight(field) : undefined,
+              whiteSpace: "pre-wrap",
+              fontSize: field.kind === "text" ? fieldFontSize(field) : 11,
+              fontWeight: field.kind === "text" ? fieldFontWeight(field) : undefined,
+              textAlign: field.kind === "text" ? fieldTextAlign(field) : undefined,
+            }}
+          >
+            {field.kind === "bound" && field.boundField ? resolveValue(field.boundField) : field.text}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export default function IssueCertificatePage() {
@@ -86,6 +172,9 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
   const [reasonForLeaving, setReasonForLeaving] = useState("completion of studies")
   const [academicSummary, setAcademicSummary] = useState("")
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // "none" = fall back to the existing default certificate layout — the
+  // only behavior that existed before Story 12.8, and still the default here.
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none")
 
   const { data: profile, isLoading } = useQuery<CertificateProfile>({
     queryKey: ["certificateProfile", studentId],
@@ -95,6 +184,18 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
       return res.json()
     }
   })
+
+  const { data: templates } = useQuery<CertificateTemplate[]>({
+    queryKey: ["certificateTemplates"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/certificate-templates")
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(extractApiError(data, "Failed to load certificate templates"))
+      return data.templates
+    },
+  })
+
+  const selectedTemplate = templates?.find((t) => String(t.id) === selectedTemplateId) ?? null
 
   const mutation = useMutation({
     mutationFn: async (data: IssueCertificatePayload) => {
@@ -147,8 +248,36 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
       characterGrade,
       studentAttributes,
       reasonForLeaving,
-      academicSummary: academicSummary || "Completed studies satisfactorily."
+      academicSummary: academicSummary || "Completed studies satisfactorily.",
+      templateId: selectedTemplateId !== "none" ? Number(selectedTemplateId) : null,
     })
+  }
+
+  function resolveBoundFieldValue(key: BoundFieldKey): string {
+    switch (key) {
+      case "STUDENT_NAME":
+        return profile!.fullName
+      case "ADMISSION_NUMBER":
+        return profile!.admissionNumber || "N/A"
+      case "DATE_OF_ADMISSION":
+        return profile!.dateOfAdmission ? new Date(profile!.dateOfAdmission).toLocaleDateString() : "N/A"
+      case "ATTENDANCE_PERCENTAGE":
+        return profile!.attendancePercentage !== null ? `${profile!.attendancePercentage}%` : "N/A"
+      case "CHARACTER_GRADE":
+        return CHARACTER_GRADE_LABELS[characterGrade]
+      case "STUDENT_ATTRIBUTES":
+        return studentAttributes
+      case "REASON_FOR_LEAVING":
+        return reasonForLeaving
+      case "ACADEMIC_SUMMARY":
+        return academicSummary || "Completed studies satisfactorily."
+      case "CERTIFICATE_ID":
+        return "(assigned upon issuance)"
+      case "ISSUED_DATE":
+        return new Date().toLocaleDateString()
+      default:
+        return ""
+    }
   }
 
   return (
@@ -165,6 +294,48 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
             <div><span className="text-muted-foreground block text-xs">Date of Admission</span> {profile.dateOfAdmission ? new Date(profile.dateOfAdmission).toLocaleDateString() : 'N/A'}</div>
             <div><span className="text-muted-foreground block text-xs">Attendance</span> {profile.attendancePercentage !== null ? `${profile.attendancePercentage}%` : 'N/A'}</div>
           </div>
+        </div>
+
+        {/* Certificate Layout */}
+        <div className="rounded-lg border bg-card p-6 space-y-4">
+          <h3 className="text-lg font-semibold border-b pb-2">Certificate Layout</h3>
+          <div className="space-y-2">
+            <Label>Select Template</Label>
+            <div className="flex items-center gap-2">
+              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <SelectTrigger className="flex-1"><SelectValue placeholder="Default Layout" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Default Layout</SelectItem>
+                  {templates?.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedTemplate}
+                onClick={() => selectedTemplate && router.push(`/admin/certificate-templates?edit=${selectedTemplate.id}`)}
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit Template
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {selectedTemplate
+                ? `Preview below reflects "${selectedTemplate.name}".`
+                : "Using the default certificate layout."}
+            </p>
+            {selectedTemplate && (
+              <p className="text-xs text-amber-600 dark:text-amber-500">
+                Note: issuing a certificate always uses the default layout for now — custom-template rendering isn&apos;t wired up yet. The preview below is for design reference only.
+              </p>
+            )}
+          </div>
+
+          {selectedTemplate && (
+            <TemplatePreview template={selectedTemplate} resolveValue={resolveBoundFieldValue} />
+          )}
         </div>
 
         {/* Academic & Remarks */}
