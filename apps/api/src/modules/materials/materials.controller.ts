@@ -4,7 +4,7 @@ import { Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { AuthRequest } from '../../middleware/authMiddleware.js';
 import { createMaterialSchema, materialListQuerySchema, POSTGRES_INT4_MAX } from '../../validators/materialValidators.js';
-import { uploadBlob, deleteBlob, blobExists, getDownloadSasUrl } from './materials.blob.js';
+import { uploadBlob, deleteBlob, blobExists, getDownloadSasUrl, getLocalBlobAbsolutePath } from './materials.blob.js';
 
 const prisma = new PrismaClient();
 
@@ -246,6 +246,32 @@ export const downloadMaterial = async (req: AuthRequest, res: Response) => {
     console.error('Error downloading material:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
+};
+
+/**
+ * Dev-only counterpart to materials.blob's local-disk fallback: streams a
+ * blob straight off disk when Azure isn't reachable locally. The real
+ * entitlement check already ran in downloadMaterial before it redirected
+ * here; this route just needs a valid session and never runs in production
+ * (materials.blob only ever hands out a /local-blob URL when
+ * NODE_ENV !== 'production').
+ */
+export const serveLocalBlob = async (req: AuthRequest, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const key = req.params.key as string;
+  if (!/^[A-Za-z0-9_.-]+$/.test(key)) {
+    return res.status(400).json({ error: 'Invalid key' });
+  }
+
+  const filename = typeof req.query.filename === 'string' ? req.query.filename : key;
+  return res.download(getLocalBlobAbsolutePath(key), filename, (err) => {
+    if (err && !res.headersSent) {
+      res.status(404).json({ error: 'File not found in local storage' });
+    }
+  });
 };
 
 export const deleteMaterial = async (req: AuthRequest, res: Response) => {
