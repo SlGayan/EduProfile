@@ -16,6 +16,7 @@ import {
   BarChart3,
   TrendingUp,
   ClipboardList,
+  LayoutTemplate,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -42,6 +43,7 @@ const principalNavItems = [
   { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/principal/search-students", label: "Search Students", icon: Search },
   { href: "/principal/certificates", label: "Certificates", icon: FileText },
+  { href: "/admin/certificate-templates", label: "Certificate Templates", icon: LayoutTemplate },
   { href: "/principal/analytics", label: "Analytics", icon: TrendingUp },
 ]
 
@@ -49,6 +51,7 @@ const adminNavItems = [
   { href: "/admin/users", label: "User Management", icon: Users },
   { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/admin/search-students", label: "Search Students", icon: Search },
+  { href: "/admin/certificate-templates", label: "Certificate Templates", icon: LayoutTemplate },
 ]
 
 const studentNavItems = [

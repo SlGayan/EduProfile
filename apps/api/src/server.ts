@@ -14,6 +14,7 @@ import subjectsRouter from './modules/subjects/subjects.routes.js';
 import teacherSubjectAssignmentsRouter from './modules/teacherSubjectAssignments/teacherSubjectAssignments.routes.js';
 import analyticsRouter from './modules/analytics/analytics.routes.js';
 import certificateRoutes from './routes/certificates.js';
+import certificateTemplatesRouter from './modules/certificateTemplates/certificateTemplates.routes.js';
 
 dotenv.config();
 
@@ -64,6 +65,9 @@ app.use('/api/teachers', teachersRouter);
 
 // Certificate routes
 app.use('/api/certificates', certificateRoutes);
+
+// Certificate letterhead template canvas routes (Admin/Principal-only, Story 12.8)
+app.use('/api/certificate-templates', certificateTemplatesRouter);
 
 // Marks management routes (bulk import)
 app.use('/api/marks', marksRouter);

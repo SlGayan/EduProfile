@@ -15,6 +15,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
 const SHARED_ROUTES: { path: string; roles: string[] }[] = [
     { path: "/admin/search-students", roles: ["admin", "principal", "teacher"] },
     { path: "/admin/classes", roles: ["admin", "principal"] },
+    { path: "/admin/certificate-templates", roles: ["admin", "principal"] },
 ]
 
 export function middleware(request: NextRequest) {
