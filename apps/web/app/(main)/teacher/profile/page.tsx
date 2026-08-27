@@ -101,7 +101,6 @@ function EditContactForm({ profile }: { profile: TeacherProfile }) {
     <Card>
       <CardHeader>
         <CardTitle>Contact Information</CardTitle>
-        <CardDescription>Changes here save immediately — no approval needed.</CardDescription>
       </CardHeader>
       <CardContent>
         <form
@@ -221,7 +220,6 @@ export default function TeacherProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>Staff Information</CardTitle>
-          <CardDescription>Your teacher profile details</CardDescription>
         </CardHeader>
         <CardContent>
           <dl className="grid gap-6 sm:grid-cols-2">
