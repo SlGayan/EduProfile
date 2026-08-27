@@ -32,8 +32,9 @@ const teacherNavItems = [
   { href: "/teacher/search-students", label: "Search Students", icon: Search },
   { href: "/teacher/class-marks", label: "Class Marks", icon: BarChart3 },
   { href: "/teacher/analytics", label: "Analytics", icon: TrendingUp },
-  { href: "/teacher/pending-activities", label: "Pending Activities", icon: ClipboardList },
+  { href: "/teacher/pending-requests", label: "Pending Requests", icon: ClipboardList },
   { href: "/teacher/materials", label: "Study Materials", icon: FileText },
+  { href: "/teacher/profile", label: "My Profile", icon: User },
 ]
 
 const principalNavItems = [

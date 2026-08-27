@@ -11,7 +11,7 @@ import {
 // singleton exists in this codebase; introducing one is out of scope here.
 const prisma = new PrismaClient();
 
-type AuthzFailure = { status: number; error: string };
+export type AuthzFailure = { status: number; error: string };
 
 /**
  * The JWT carries a lowercase, frontend-normalized role (see routes/auth.ts) —
@@ -61,7 +61,7 @@ function parseId(raw: unknown): number | null {
  * "some" check, never a single-class lookup. Mirrors the authorization used by
  * marks.controller's importMarks/getClassMarks.
  */
-async function authorizeStudentAccess(
+export async function authorizeStudentAccess(
   req: AuthRequest,
   studentId: number
 ): Promise<AuthzFailure | null> {
