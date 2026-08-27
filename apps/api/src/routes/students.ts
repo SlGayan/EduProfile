@@ -9,6 +9,7 @@ import {
   EXPECTED_IMPORT_COLUMNS,
   studentImportRowSchema,
   studentSearchQuerySchema,
+  createStudentSchema,
 } from '../validators/studentValidators.js';
 import {
   listActivities,
@@ -199,14 +200,39 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
       });
     }
 
+    // A Teacher importing students obviously means "add these to my class" —
+    // the single-record `POST /api/students` already does this, and the bulk
+    // path should not behave differently just because it's a CSV. Only
+    // applies when the teacher owns exactly one class; an Administrator's
+    // import is never auto-assigned, matching its existing (unchanged)
+    // behavior, and an ambiguous multi-class teacher is left for an explicit
+    // admin assignment rather than guessing which class was meant.
+    let autoEnrollClassId: number | null = null;
+    if (req.user!.role === 'teacher') {
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: req.user!.id, user: { deletedAt: null } },
+        include: { classes: true },
+      });
+      if (teacher && teacher.classes.length === 1) {
+        autoEnrollClassId = teacher.classes[0]!.id;
+      }
+    }
+
     let createdCount = 0;
     let updatedCount = 0;
+    const importedStudents: {
+      indexNumber: string;
+      fullName: string;
+      email: string;
+      status: 'created' | 'updated';
+    }[] = [];
 
     try {
       await prisma.$transaction(async (tx: any) => {
         for (const { data } of validRows) {
           const existingStudent = await tx.student.findUnique({
             where: { indexNumber: data.indexNumber },
+            include: { user: true },
           });
 
           if (existingStudent) {
@@ -219,9 +245,16 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
                 nicNumber: data.nicNumber ?? null,
                 olYear: data.olYear ?? null,
                 alYear: data.alYear ?? null,
+                ...(autoEnrollClassId !== null && { classes: { connect: { id: autoEnrollClassId } } }),
               },
             });
             updatedCount++;
+            importedStudents.push({
+              indexNumber: data.indexNumber,
+              fullName: data.fullName,
+              email: existingStudent.user.email,
+              status: 'updated',
+            });
           } else {
             // Deterministic placeholder password; student resets it on first login.
             const placeholderPassword = `Student@${data.indexNumber}`;
@@ -246,9 +279,16 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
                 nicNumber: data.nicNumber ?? null,
                 olYear: data.olYear ?? null,
                 alYear: data.alYear ?? null,
+                ...(autoEnrollClassId !== null && { classes: { connect: { id: autoEnrollClassId } } }),
               },
             });
             createdCount++;
+            importedStudents.push({
+              indexNumber: data.indexNumber,
+              fullName: data.fullName,
+              email: user.email,
+              status: 'created',
+            });
           }
         }
       });
@@ -267,9 +307,118 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
       message: 'Import completed successfully',
       created: createdCount,
       updated: updatedCount,
+      students: importedStudents,
     });
   } catch (err) {
     console.error('Error importing students:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/students — single-record equivalent of `/import`'s per-row logic:
+// same field rules (including the `@edu.com` email restriction) and the same
+// create-or-update-by-indexNumber behavior. A Teacher additionally gets the
+// new student enrolled in a class, since that is the point of adding one from
+// their own dashboard; an Administrator has no "own class" and must pass
+// `classId` explicitly to enroll (mirrors `/import`, which never assigns a
+// class either).
+router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequest, res) => {
+  try {
+    const parsed = createStudentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+    }
+    const { email, fullName, indexNumber, dateOfBirth, address, nicNumber, olYear, alYear, classId } =
+      parsed.data;
+
+    // The JWT's role is lowercase and frontend-normalized (see
+    // activities.controller.ts) — 'admin', not 'ADMINISTRATOR'.
+    let targetClassId: number | null = null;
+
+    if (req.user!.role === 'teacher') {
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: req.user!.id, user: { deletedAt: null } },
+        include: { classes: true },
+      });
+      if (!teacher) {
+        return res.status(403).json({ error: 'Teacher profile not found' });
+      }
+      const teacherClassIds = teacher.classes.map((c) => c.id);
+      if (teacherClassIds.length === 0) {
+        return res.status(403).json({ error: 'Teacher is not assigned to any classes' });
+      }
+      if (classId !== undefined) {
+        if (!teacherClassIds.includes(classId)) {
+          return res.status(403).json({ error: 'You do not have permission to enroll a student in that class' });
+        }
+        targetClassId = classId;
+      } else if (teacherClassIds.length === 1) {
+        targetClassId = teacherClassIds[0]!;
+      } else {
+        return res.status(400).json({
+          error: 'You teach multiple classes — specify classId',
+          classes: teacher.classes.map((c) => ({ id: c.id, name: c.name })),
+        });
+      }
+    } else if (classId !== undefined) {
+      const targetClass = await prisma.class.findUnique({ where: { id: classId } });
+      if (!targetClass) {
+        return res.status(404).json({ error: 'Class not found' });
+      }
+      targetClassId = classId;
+    }
+
+    const existingStudent = await prisma.student.findUnique({ where: { indexNumber } });
+
+    if (existingStudent) {
+      const updated = await prisma.student.update({
+        where: { id: existingStudent.id },
+        data: {
+          fullName,
+          dateOfBirth: new Date(dateOfBirth),
+          address,
+          nicNumber: nicNumber ?? null,
+          olYear: olYear ?? null,
+          alYear: alYear ?? null,
+          ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),
+        },
+      });
+      return res.status(200).json({ message: 'Student updated', id: updated.id, indexNumber: updated.indexNumber });
+    }
+
+    // Deterministic placeholder password, matching `/import` — student resets
+    // it on first login (mustChangePassword).
+    const placeholderPassword = `Student@${indexNumber}`;
+    const hashedPassword = await bcrypt.hash(placeholderPassword, 10);
+
+    const student = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { email, password: hashedPassword, role: 'STUDENT', mustChangePassword: true },
+      });
+      return tx.student.create({
+        data: {
+          userId: user.id,
+          fullName,
+          indexNumber,
+          dateOfBirth: new Date(dateOfBirth),
+          address,
+          nicNumber: nicNumber ?? null,
+          olYear: olYear ?? null,
+          alYear: alYear ?? null,
+          ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),
+        },
+      });
+    });
+
+    return res.status(201).json({ message: 'Student created', id: student.id, indexNumber: student.indexNumber });
+  } catch (err: any) {
+    if (err?.code === 'P2002') {
+      return res.status(409).json({
+        error: 'A student with that email or index number already exists',
+        details: err.meta,
+      });
+    }
+    console.error('Error creating student:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

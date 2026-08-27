@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -24,13 +25,19 @@ import { fetchTeacherDashboard } from "@/lib/analytics"
 // No role guard here by design: middleware.ts already redirects any
 // non-teacher away from /teacher/*, matching every sibling teacher page.
 
+// "Add Student" and "Add Marks" are real single-record forms (POST
+// /api/students, POST /api/marks) alongside their bulk "Import" siblings.
+// "Add Student Activity" is its own dedicated page with an embedded student
+// picker, rather than a control bolted onto the general Search Students page
+// (PRD epic-8 Story 8.3 AC1 asks for a dedicated activities section, not a
+// detour through an unrelated feature).
 const quickActions = [
-  { label: "Add Student", icon: UserPlus },
-  { label: "Import Students", icon: Upload },
-  { label: "Add Marks", icon: PenLine },
-  { label: "Import Marks", icon: FileSpreadsheet },
-  { label: "Add Student Activity", icon: ClipboardList },
-  { label: "Search Student", icon: Search },
+  { label: "Add Student", icon: UserPlus, href: "/teacher/add-student" },
+  { label: "Import Students", icon: Upload, href: "/teacher/import-students" },
+  { label: "Add Marks", icon: PenLine, href: "/teacher/add-marks" },
+  { label: "Import Marks", icon: FileSpreadsheet, href: "/teacher/import-marks" },
+  { label: "Add Student Activity", icon: ClipboardList, href: "/teacher/add-student-activity" },
+  { label: "Search Student", icon: Search, href: "/teacher/search-students" },
 ]
 
 /** Renders a class average for display. `null` means no marks recorded yet. */
@@ -193,9 +200,11 @@ export default function TeacherDashboardPage() {
           <h2 className="text-lg font-semibold">Quick Actions</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {quickActions.map((action) => (
-              <Button key={action.label} variant="outline" className="w-full justify-start bg-transparent">
-                <action.icon className="mr-2 h-4 w-4" />
-                {action.label}
+              <Button key={action.label} variant="outline" className="w-full justify-start bg-transparent" asChild>
+                <Link href={action.href}>
+                  <action.icon className="mr-2 h-4 w-4" />
+                  {action.label}
+                </Link>
               </Button>
             ))}
           </div>
