@@ -27,13 +27,15 @@ const prisma = new PrismaClient();
  * shape as `GET /api/analytics/class/:classId` for consistency.
  *
  * "Marks Pending" counts a student the moment they're missing ANY expected
- * subject, not just when they have zero marks. `Subject` has no relation to
- * `Class` in this schema — it's one global table shared by every class — so
- * there is no stored "this class expects N subjects" value; the full subject
- * catalogue (`Subject.count()`) is used as the expected count, queried fresh
- * rather than hardcoded since subjects can change. This assumes every class
- * studies the same subject set; if grades ever diverge, this needs a real
- * Class-Subject relation instead.
+ * subject, not just when they have zero marks. The expected-subjects set for
+ * a class is the union of (a) subjects with a `TeacherSubjectAssignment` for
+ * this class (Story 12.3's real Class-Subject relation) and (b) subjects
+ * that have ever had a `TermMark` recorded for one of this class's students,
+ * across all years/terms. Deliberately NOT a global `Subject.count()` (the
+ * prior approach): `Subject` is one table shared by every class, so any
+ * unrelated class or test creating a new Subject row would silently inflate
+ * every other class's expected count and misclassify fully-marked students
+ * as pending.
  *
  * "Needs Support" flags a student the moment ANY ONE of their recorded
  * subjects is below 50 — deliberately not the same thing as their overall
@@ -141,13 +143,27 @@ export const getTeacherDashboard = async (req: AuthRequest, res: Response) => {
         } as const;
       }
 
-      const [termMarks, expectedSubjectCount] = await Promise.all([
+      const [termMarks, classAssignedSubjects, classRecordedSubjects] = await Promise.all([
         tx.termMark.findMany({
           where: { studentId: { in: studentIds }, year, term },
           select: { studentId: true, subjectId: true, marks: true },
         }),
-        tx.subject.count(),
+        tx.teacherSubjectAssignment.findMany({
+          where: { classId: primaryClass.id },
+          select: { subjectId: true },
+          distinct: ['subjectId'],
+        }),
+        tx.termMark.findMany({
+          where: { studentId: { in: studentIds } },
+          select: { subjectId: true },
+          distinct: ['subjectId'],
+        }),
       ]);
+
+      const expectedSubjectCount = new Set([
+        ...classAssignedSubjects.map((a) => a.subjectId),
+        ...classRecordedSubjects.map((m) => m.subjectId),
+      ]).size;
 
       // Group by student, keeping both the raw mark values (for the class
       // average, so a student with more subjects recorded doesn't pull the
