@@ -208,10 +208,14 @@ export default function StudentSearch({ onSelectStudent }: StudentSearchProps = 
             <Label htmlFor="nicNumber">NIC Number</Label>
             <Input
               id="nicNumber"
-              maxLength={10}
-              placeholder="Enter NIC..."
+              maxLength={12}
+              placeholder="e.g., 991234567V or 199912345678"
               value={filters.nicNumber}
-              onChange={(e) => handleInputChange("nicNumber", e.target.value)}
+              onChange={(e) => {
+                // Old format: 9 digits + V/X. New format: 12 digits.
+                const val = e.target.value.toUpperCase().replace(/[^0-9VX]/g, "").slice(0, 12)
+                handleInputChange("nicNumber", val)
+              }}
               className="w-full"
             />
           </div>

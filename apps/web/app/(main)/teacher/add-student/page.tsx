@@ -179,7 +179,17 @@ export default function AddStudentPage() {
 
             <div className="space-y-2">
               <Label htmlFor="nicNumber">NIC Number (optional)</Label>
-              <Input id="nicNumber" value={fields.nicNumber} onChange={setField("nicNumber")} />
+              <Input
+                id="nicNumber"
+                maxLength={12}
+                placeholder="e.g., 991234567V or 199912345678"
+                value={fields.nicNumber}
+                onChange={(e) => {
+                  // Old format: 9 digits + V/X. New format: 12 digits.
+                  const val = e.target.value.toUpperCase().replace(/[^0-9VX]/g, "").slice(0, 12)
+                  setFields((prev) => ({ ...prev, nicNumber: val }))
+                }}
+              />
             </div>
 
             <div className="space-y-2 sm:col-span-2">
