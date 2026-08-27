@@ -307,24 +307,24 @@ export default function TeacherMaterialsPage() {
             onSubmit={form.handleSubmit((values) => uploadMutation.mutate(values))}
             className="space-y-4"
           >
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="material-title">Title</Label>
               <Input id="material-title" {...form.register("title")} className="w-full" />
               {form.formState.errors.title && (
-                <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
+                <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
               )}
             </div>
 
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="material-description">Description (optional)</Label>
               <Textarea id="material-description" {...form.register("description")} className="w-full" />
               {form.formState.errors.description && (
-                <p className="text-xs text-destructive mt-1">{form.formState.errors.description.message}</p>
+                <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
               )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+              <div className="grid gap-2">
                 <Label htmlFor="material-class">Class</Label>
                 {classesError && mergedClasses.length === 0 ? (
                   <p className="text-xs text-destructive">Failed to load classes.</p>
@@ -349,12 +349,12 @@ export default function TeacherMaterialsPage() {
                   </Select>
                 )}
                 {!classesError && subjectAssignmentsError && (
-                  <p className="text-xs text-destructive mt-1">
+                  <p className="text-xs text-destructive">
                     Failed to load subject-assigned classes. Showing your owned classes only.
                   </p>
                 )}
               </div>
-              <div>
+              <div className="grid gap-2">
                 <Label htmlFor="material-subject">Subject</Label>
                 {subjectsError ? (
                   <p className="text-xs text-destructive">Failed to load subjects.</p>
@@ -379,7 +379,7 @@ export default function TeacherMaterialsPage() {
               <p className="text-xs text-muted-foreground">Select at least one of class or subject.</p>
             )}
 
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="material-file">File</Label>
               <Input
                 id="material-file"
@@ -390,12 +390,12 @@ export default function TeacherMaterialsPage() {
                 onChange={handleFileChange}
               />
               {file && !fileError && (
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-muted-foreground">
                   {file.name} ({formatFileSize(file.size)})
                 </p>
               )}
-              {fileError && <p className="text-xs text-destructive mt-1">{fileError}</p>}
-              <p className="text-xs text-muted-foreground mt-1">
+              {fileError && <p className="text-xs text-destructive">{fileError}</p>}
+              <p className="text-xs text-muted-foreground">
                 PDF, DOC/DOCX, or image. Max {MAX_MATERIAL_UPLOAD_MB}MB.
               </p>
             </div>
