@@ -1,12 +1,14 @@
 "use client"
 
 import { useMemo } from "react"
+import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Users, FileText, TrendingUp, Award, AlertCircle } from "lucide-react"
+import { Users, FileText, TrendingUp, Award, AlertCircle, FileCheck } from "lucide-react"
 import { fetchSchoolAnalytics, formatAverage, toSchoolSubjectRows } from "@/lib/analytics"
+import { fetchEligibleForCertificateCount } from "@/lib/certificates"
 
 // No role guard here by design: middleware.ts already redirects any
 // non-principal away from /principal/*, matching every sibling principal page.
@@ -32,6 +34,12 @@ export default function PrincipalDashboardPage() {
 
   const totals = analytics?.totals
 
+  const eligibleForCertificate = useQuery({
+    queryKey: ["certificates-eligible-count"],
+    queryFn: fetchEligibleForCertificateCount,
+    retry: false,
+  })
+
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <div>
@@ -47,7 +55,7 @@ export default function PrincipalDashboardPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {isLoading ? (
             <>
               <Skeleton className="h-28 w-full" data-testid="stat-card-skeleton" />
@@ -93,6 +101,29 @@ export default function PrincipalDashboardPage() {
                   <p className="text-xs text-muted-foreground">Weighted across all subjects</p>
                 </CardContent>
               </Card>
+
+              <Link href="/principal/issue-certificate" className="block">
+                <Card className="transition-colors hover:bg-accent">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Ready to Certify</CardTitle>
+                    <FileCheck className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {eligibleForCertificate.isLoading
+                        ? "…"
+                        : eligibleForCertificate.isError
+                          ? "—"
+                          : eligibleForCertificate.data}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {eligibleForCertificate.isError
+                        ? "Failed to load"
+                        : "Students with approved records, no certificate yet"}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
             </>
           )}
         </div>

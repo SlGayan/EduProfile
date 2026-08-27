@@ -33,7 +33,7 @@ const teacherNavItems = [
   { href: "/teacher/search-students", label: "Search Students", icon: Search },
   { href: "/teacher/class-marks", label: "Class Marks", icon: BarChart3 },
   { href: "/teacher/analytics", label: "Analytics", icon: TrendingUp },
-  { href: "/teacher/pending-activities", label: "Pending Activities", icon: ClipboardList },
+  { href: "/teacher/pending-activities", label: "Pending Approvals", icon: ClipboardList },
   { href: "/teacher/materials", label: "Study Materials", icon: FileText },
 ]
 
@@ -55,7 +55,7 @@ const studentNavItems = [
   { href: "/student/profile", label: "My Profile", icon: User },
   { href: "/student/marks", label: "My Marks", icon: Award },
   { href: "/student/activities", label: "My Activities", icon: Trophy },
-  { href: "/student/certificates", label: "My Certificates", icon: ScrollText },
+  { href: "/student/certificates", label: "Character Certificates", icon: ScrollText },
   { href: "/student/materials", label: "Study Materials", icon: FileText },
 ]
 

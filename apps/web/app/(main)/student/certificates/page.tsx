@@ -18,12 +18,6 @@ interface Certificate {
   characterGrade: "GOOD" | "VERY_GOOD" | "EXCELLENT" | null
 }
 
-const GRADE_LABELS: Record<string, string> = {
-  GOOD: "Good",
-  VERY_GOOD: "Very Good",
-  EXCELLENT: "Excellent",
-}
-
 async function fetchMyCertificates(): Promise<Certificate[]> {
   const response = await apiFetch("/api/students/me/certificates")
   if (!response.ok) {
@@ -64,6 +58,21 @@ async function downloadCertificate(certificate: Certificate) {
   URL.revokeObjectURL(url)
 }
 
+function GradeBadge({ grade }: { grade?: Certificate["characterGrade"] }) {
+  if (!grade) return <span className="text-muted-foreground">—</span>
+
+  switch (grade) {
+    case "EXCELLENT":
+      return <Badge className="bg-green-600 hover:bg-green-700">Excellent</Badge>
+    case "VERY_GOOD":
+      return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">Very Good</Badge>
+    case "GOOD":
+      return <Badge variant="secondary">Good</Badge>
+    default:
+      return <Badge variant="secondary">{grade}</Badge>
+  }
+}
+
 export default function StudentCertificatesPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
@@ -89,7 +98,9 @@ export default function StudentCertificatesPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">My Certificates</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">Character Certificates</h1>
+      </div>
 
       <Card>
         <CardHeader>
@@ -134,13 +145,7 @@ export default function StudentCertificatesPage() {
                     <TableRow key={certificate.id}>
                       <TableCell className="font-medium">{certificate.id}</TableCell>
                       <TableCell>{new Date(certificate.issuedAt).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        {certificate.characterGrade ? (
-                          <Badge variant="secondary">{GRADE_LABELS[certificate.characterGrade]}</Badge>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
+                      <TableCell><GradeBadge grade={certificate.characterGrade} /></TableCell>
                       <TableCell>
                         <Button
                           variant="outline"

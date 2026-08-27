@@ -6,9 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Trophy, Plus } from "lucide-react"
+import { AlertCircle, Trophy, Plus, Loader2, Paperclip } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
-import { formatDateRange, type Activity } from "@/lib/activities"
+import { formatDateRange, toDateInputValue, type Activity } from "@/lib/activities"
+import { fetchMyStudentCertificates, extensionFromFileUrl, type StudentCertificate } from "@/lib/studentCertificates"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -17,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
+import { getCurrentUser } from "@/lib/auth"
 
 async function fetchMyActivities(): Promise<Activity[]> {
   const response = await apiFetch("/api/students/me/activities")
@@ -241,9 +243,9 @@ function EditActivityDialog({ activity }: { activity: Activity }) {
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="activityName">Activity Name</Label>
-              <Select 
-                name="activityName" 
-                defaultValue={initialIsCustom ? "Other" : activity.activityName} 
+              <Select
+                name="activityName"
+                defaultValue={initialIsCustom ? "Other" : activity.activityName}
                 onValueChange={(val) => setIsCustomActivity(val === "Other")}
                 required
               >
@@ -304,9 +306,285 @@ function EditActivityDialog({ activity }: { activity: Activity }) {
   )
 }
 
+/**
+ * XHR rather than fetch/apiFetch: the request is multipart/form-data with an
+ * optional file, and apiFetch always sets a JSON Content-Type header which
+ * would strip the multipart boundary. Mirrors uploadMaterial in
+ * teacher/materials/page.tsx, the established pattern in this codebase for
+ * file-carrying form submissions.
+ */
+function submitCertificateForm(
+  url: string,
+  method: "POST" | "PATCH",
+  formData: FormData,
+  token: string | undefined
+): Promise<{ status: number; body: any }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(method, url)
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+    xhr.onload = () => {
+      let body: any = null
+      try {
+        body = JSON.parse(xhr.responseText)
+      } catch {
+        // no JSON body
+      }
+      resolve({ status: xhr.status, body })
+    }
+    xhr.onerror = () => reject(new Error("Network error"))
+    xhr.send(formData)
+  })
+}
+
+function buildCertificateFormData(formEl: HTMLFormElement): FormData {
+  const formData = new FormData(formEl)
+  // Drop an empty file input entirely — an empty File would otherwise arrive
+  // server-side as a zero-byte "file", tripping the multer file filter.
+  const file = formData.get("file")
+  if (file instanceof File && file.size === 0) {
+    formData.delete("file")
+  }
+  return formData
+}
+
+function SubmitCertificateDialog() {
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: async (formEl: HTMLFormElement) => {
+      const formData = buildCertificateFormData(formEl)
+      const evidenceUrl = (formData.get("evidenceUrl") as string) || ""
+      const file = formData.get("file")
+      if (!evidenceUrl && !(file instanceof File)) {
+        throw new Error("Provide at least one form of evidence: an evidence link or an uploaded file")
+      }
+
+      const token = getCurrentUser()?.token
+      const { status, body } = await submitCertificateForm(
+        "/api/students/me/student-certificates",
+        "POST",
+        formData,
+        token
+      )
+      if (status < 200 || status >= 300) {
+        throw new Error(body?.error || "Failed to submit certificate")
+      }
+      return body
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-student-certificates"] })
+      toast.success("Certificate submitted for review")
+      setOpen(false)
+      setError(null)
+    },
+    onError: (err: Error) => {
+      setError(err.message || "Failed to submit certificate")
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setError(null)
+    mutation.mutate(e.currentTarget)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setError(null) }}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Certificate
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Add Certificate</DialogTitle>
+            <DialogDescription>
+              Submit an external course, competition, or achievement certificate for review by your class teacher.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Certificate Title</Label>
+              <Input id="title" name="title" placeholder="e.g. Introduction to Python" required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="issuingOrganization">Issuing Organization</Label>
+              <Input id="issuingOrganization" name="issuingOrganization" placeholder="e.g. Coursera" required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="category">Category</Label>
+              <Input id="category" name="category" placeholder="e.g. Academic, Sports, Leadership" required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="issueDate">Issue Date</Label>
+              <Input id="issueDate" name="issueDate" type="date" required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description (Optional)</Label>
+              <Textarea id="description" name="description" />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="evidenceUrl">Evidence Link (Optional)</Label>
+              <Input id="evidenceUrl" name="evidenceUrl" type="url" placeholder="https://..." />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="file">Upload File (Optional)</Label>
+              <Input id="file" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+              <p className="text-xs text-muted-foreground">PDF or image, up to 10MB. Provide a link, a file, or both.</p>
+            </div>
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Submitting..." : "Submit"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function EditCertificateDialog({ certificate }: { certificate: StudentCertificate }) {
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: async (formEl: HTMLFormElement) => {
+      const formData = buildCertificateFormData(formEl)
+      const evidenceUrl = (formData.get("evidenceUrl") as string) || ""
+      const file = formData.get("file")
+      if (!evidenceUrl && !(file instanceof File) && !certificate.fileUrl) {
+        throw new Error("Provide at least one form of evidence: an evidence link or an uploaded file")
+      }
+
+      const token = getCurrentUser()?.token
+      const { status, body } = await submitCertificateForm(
+        `/api/students/me/student-certificates/${certificate.id}`,
+        "PATCH",
+        formData,
+        token
+      )
+      if (status < 200 || status >= 300) {
+        throw new Error(body?.error || "Failed to update certificate")
+      }
+      return body
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-student-certificates"] })
+      toast.success("Certificate corrected and resubmitted")
+      setOpen(false)
+      setError(null)
+    },
+    onError: (err: Error) => {
+      setError(err.message || "Failed to update certificate")
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setError(null)
+    mutation.mutate(e.currentTarget)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setError(null) }}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">Correct</Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Correct Certificate</DialogTitle>
+            <DialogDescription>Update your certificate details and resubmit for review.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-title">Certificate Title</Label>
+              <Input id="edit-title" name="title" defaultValue={certificate.title} required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-issuingOrganization">Issuing Organization</Label>
+              <Input id="edit-issuingOrganization" name="issuingOrganization" defaultValue={certificate.issuingOrganization} required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-category">Category</Label>
+              <Input id="edit-category" name="category" defaultValue={certificate.category ?? ""} placeholder="e.g. Academic, Sports, Leadership" required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-issueDate">Issue Date</Label>
+              <Input id="edit-issueDate" name="issueDate" type="date" defaultValue={toDateInputValue(certificate.issueDate)} required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description (Optional)</Label>
+              <Textarea id="edit-description" name="description" defaultValue={certificate.description || ""} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-evidenceUrl">Evidence Link (Optional)</Label>
+              <Input id="edit-evidenceUrl" name="evidenceUrl" type="url" defaultValue={certificate.evidenceUrl || ""} placeholder="https://..." />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-file">Replace Uploaded File (Optional)</Label>
+              <Input id="edit-file" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+              {certificate.fileUrl && (
+                <p className="text-xs text-muted-foreground">A file is already attached. Choose a new one only to replace it.</p>
+              )}
+            </div>
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Submitting..." : "Resubmit"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+async function downloadStudentCertificateFile(certificate: StudentCertificate) {
+  let res: Response
+  try {
+    res = await apiFetch(`/api/students/me/student-certificates/${certificate.id}/file`)
+  } catch {
+    toast.error("Failed to download file")
+    return
+  }
+  if (!res.ok) {
+    toast.error("Failed to download file")
+    return
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `${certificate.title}${certificate.fileUrl ? extensionFromFileUrl(certificate.fileUrl) : ""}`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function StatusBadge({ status }: { status?: string }) {
   if (!status) return <Badge variant="secondary">UNKNOWN</Badge>
-  
+
   switch (status) {
     case 'APPROVED':
       return <Badge className="bg-green-600 hover:bg-green-700">Approved</Badge>
@@ -321,28 +599,113 @@ function StatusBadge({ status }: { status?: string }) {
   }
 }
 
+/**
+ * Activities and self-added certificates are the same submit-for-approval
+ * workflow wearing two data shapes, so they're normalized into one shape and
+ * shown in a single list instead of two separate pages for the same flow.
+ */
+interface MyItem {
+  kind: "ACTIVITY" | "CERTIFICATE"
+  id: string
+  title: string
+  subtitle: string
+  dateDisplay: string
+  status?: "PENDING" | "APPROVED" | "NEEDS_CORRECTION" | "REJECTED"
+  teacherNote?: string | null
+  reviewedByName?: string | null
+  reviewedAt?: string | null
+  achievements?: string | null
+  evidenceUrl?: string | null
+  hasFile: boolean
+  sortDate: string
+  activity?: Activity
+  certificate?: StudentCertificate
+}
+
+function normalizeActivity(activity: Activity): MyItem {
+  return {
+    kind: "ACTIVITY",
+    id: activity.id,
+    title: activity.activityName,
+    subtitle: activity.activityType,
+    dateDisplay: formatDateRange(activity.startDate, activity.endDate),
+    status: activity.status,
+    teacherNote: activity.teacherNote,
+    reviewedByName: activity.reviewedByName,
+    reviewedAt: activity.reviewedAt,
+    achievements: activity.achievements,
+    evidenceUrl: activity.evidenceUrl,
+    hasFile: false,
+    sortDate: activity.startDate,
+    activity,
+  }
+}
+
+function normalizeCertificate(certificate: StudentCertificate): MyItem {
+  return {
+    kind: "CERTIFICATE",
+    id: certificate.id,
+    title: certificate.title,
+    subtitle: certificate.category ?? certificate.issuingOrganization,
+    dateDisplay: toDateInputValue(certificate.issueDate),
+    status: certificate.status,
+    teacherNote: certificate.teacherNote,
+    reviewedByName: certificate.reviewedByName,
+    reviewedAt: certificate.reviewedAt,
+    achievements: null,
+    evidenceUrl: certificate.evidenceUrl,
+    hasFile: Boolean(certificate.fileUrl),
+    sortDate: certificate.issueDate,
+    certificate,
+  }
+}
+
 export default function StudentActivitiesPage() {
-  const {
-    data: activities,
-    isLoading,
-    error,
-  } = useQuery({
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  const activitiesQuery = useQuery({
     queryKey: ["my-activities"],
     queryFn: fetchMyActivities,
     retry: false,
   })
+  const certificatesQuery = useQuery({
+    queryKey: ["my-student-certificates"],
+    queryFn: fetchMyStudentCertificates,
+    retry: false,
+  })
+
+  const isLoading = activitiesQuery.isLoading || certificatesQuery.isLoading
+  const error = activitiesQuery.error || certificatesQuery.error
+
+  const items: MyItem[] = [
+    ...(activitiesQuery.data ?? []).map(normalizeActivity),
+    ...(certificatesQuery.data ?? []).map(normalizeCertificate),
+  ].sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
+
+  async function handleDownload(item: MyItem) {
+    if (downloadingId || !item.certificate) return
+    setDownloadingId(item.id)
+    try {
+      await downloadStudentCertificateFile(item.certificate)
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">My Activities</h1>
-        <SubmitActivityDialog />
+        <div className="flex flex-wrap gap-2">
+          <SubmitActivityDialog />
+          <SubmitCertificateDialog />
+        </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Extracurricular Activities</CardTitle>
-          <CardDescription>Your recorded participation in clubs, sports and societies</CardDescription>
+          <CardTitle>Activities & Certificates</CardTitle>
+          <CardDescription>Your recorded participation in clubs, sports and societies, plus self-added course and competition certificates</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -355,15 +718,15 @@ export default function StudentActivitiesPage() {
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                {error instanceof Error ? error.message : "Failed to load activities. Please try again later."}
+                {error instanceof Error ? error.message : "Failed to load your activities. Please try again later."}
               </AlertDescription>
             </Alert>
-          ) : !activities || activities.length === 0 ? (
+          ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Trophy className="mb-4 h-12 w-12 text-muted-foreground" />
-              <p className="text-lg font-medium">No activities recorded yet</p>
+              <p className="text-lg font-medium">Nothing recorded yet</p>
               <p className="text-sm text-muted-foreground">
-                You haven&apos;t submitted any extracurricular activities, or your teachers haven&apos;t added any to your record.
+                Submit an activity or add a certificate, or your teachers haven&apos;t added any to your record yet.
               </p>
             </div>
           ) : (
@@ -371,32 +734,70 @@ export default function StudentActivitiesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Activity</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Dates</TableHead>
-                    <TableHead>Achievements</TableHead>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Evidence</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activities.map((activity) => (
-                    <TableRow key={activity.id}>
+                  {items.map((item) => (
+                    <TableRow key={`${item.kind}-${item.id}`}>
+                      <TableCell>
+                        <Badge variant="secondary">{item.kind === "ACTIVITY" ? "Activity" : "Certificate"}</Badge>
+                      </TableCell>
                       <TableCell className="font-medium">
-                        <div>{activity.activityName}</div>
-                        {activity.teacherNote && activity.status === 'NEEDS_CORRECTION' && (
-                          <div className="text-sm text-destructive mt-1">Note: {activity.teacherNote}</div>
+                        <div>{item.title}</div>
+                        {item.achievements && <div className="text-sm text-muted-foreground">{item.achievements}</div>}
+                        {item.teacherNote && (item.status === "NEEDS_CORRECTION" || item.status === "REJECTED") && (
+                          <div className="text-sm text-destructive mt-1">Note: {item.teacherNote}</div>
                         )}
                       </TableCell>
-                      <TableCell>{activity.activityType}</TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {formatDateRange(activity.startDate, activity.endDate)}
+                      <TableCell>{item.subtitle}</TableCell>
+                      <TableCell className="whitespace-nowrap">{item.dateDisplay}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          {item.evidenceUrl && (
+                            <a href={item.evidenceUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                              Link
+                            </a>
+                          )}
+                          {item.hasFile && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-auto p-0 text-primary hover:underline"
+                              disabled={downloadingId === item.id}
+                              onClick={() => handleDownload(item)}
+                            >
+                              {downloadingId === item.id ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : (
+                                <Paperclip className="mr-1 h-3 w-3" />
+                              )}
+                              File
+                            </Button>
+                          )}
+                          {!item.evidenceUrl && !item.hasFile && "—"}
+                        </div>
                       </TableCell>
-                      <TableCell>{activity.achievements ?? "—"}</TableCell>
-                      <TableCell><StatusBadge status={activity.status} /></TableCell>
+                      <TableCell>
+                        <StatusBadge status={item.status} />
+                        {item.reviewedByName && item.reviewedAt && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            by {item.reviewedByName} on {toDateInputValue(item.reviewedAt)}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
-                        {activity.status === 'NEEDS_CORRECTION' && (
-                          <EditActivityDialog activity={activity} />
+                        {item.status === "NEEDS_CORRECTION" && item.activity && (
+                          <EditActivityDialog activity={item.activity} />
+                        )}
+                        {item.status === "NEEDS_CORRECTION" && item.certificate && (
+                          <EditCertificateDialog certificate={item.certificate} />
                         )}
                       </TableCell>
                     </TableRow>

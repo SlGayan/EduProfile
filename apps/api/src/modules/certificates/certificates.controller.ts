@@ -248,6 +248,36 @@ export const getCertificatePdf = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * GET /api/certificates/eligible-count — principal dashboard scorecard.
+ *
+ * A character certificate is issued directly with no request/approval step,
+ * so "pending" here means "ready to issue": an active student with at least
+ * one approved activity or approved self-added certificate on record who has
+ * never had a character certificate issued at all. Re-issuing for a student
+ * who already has one is a deliberate principal action from the search flow,
+ * not something this count should keep nudging about.
+ */
+export const getEligibleForCertificateCount = async (_req: AuthRequest, res: Response) => {
+  try {
+    const count = await prisma.student.count({
+      where: {
+        user: { deletedAt: null },
+        certificates: { none: {} },
+        OR: [
+          { activities: { some: { status: 'APPROVED' } } },
+          { studentCertificates: { some: { status: 'APPROVED' } } },
+        ],
+      },
+    });
+
+    return res.status(200).json({ count });
+  } catch (error) {
+    console.error('Error counting certificate-eligible students:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const listCertificates = async (req: AuthRequest, res: Response) => {
   try {
     const certificates = await prisma.characterCertificate.findMany({
@@ -258,6 +288,68 @@ export const listCertificates = async (req: AuthRequest, res: Response) => {
     return res.status(200).json(certificates);
   } catch (error) {
     console.error('Error listing certificates:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * GET /api/students/me/certificates — the caller's own record, role STUDENT.
+ * Mirrors listMyActivities/listMyMaterials: identity comes from the verified
+ * token, so there is no cross-student authorization check to perform.
+ *
+ * MUST be registered above `/:id/...` in routes/students.ts — otherwise
+ * `/me/certificates` matches a param route with id="me" first.
+ */
+export const listMyCertificates = async (req: AuthRequest, res: Response) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    const certificates = await prisma.characterCertificate.findMany({
+      where: { studentId: student.id },
+      select: { id: true, issuedAt: true, characterGrade: true },
+      orderBy: { issuedAt: 'desc' },
+    });
+
+    // Empty is `200 []`, never 404 — matches listMyActivities/listMyMaterials
+    // so the page's empty state depends on the same contract.
+    return res.status(200).json(certificates);
+  } catch (error) {
+    console.error('Error listing own certificates:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * GET /api/students/me/certificates/:id/pdf — download the caller's own
+ * certificate. Ownership is checked here (student.id must match the
+ * certificate's studentId) rather than relying on a route-level guard, since
+ * the principal-facing getCertificatePdf above intentionally has no such
+ * restriction.
+ */
+export const getMyCertificatePdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user!.id, user: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    const certificate = await findCertificateByIdParam(req.params.id as string);
+    if (!certificate || certificate.studentId !== student.id) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+
+    streamCertificatePdf(certificate, res);
+  } catch (error) {
+    console.error('Error fetching own certificate PDF:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

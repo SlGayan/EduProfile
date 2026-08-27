@@ -1,3 +1,7 @@
+"use client"
+
+import Link from "next/link"
+import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,7 +15,10 @@ import {
   FileSpreadsheet,
   ClipboardList,
   Search,
+  ClipboardCheck,
 } from "lucide-react"
+import { fetchPendingActivities } from "@/lib/activities"
+import { fetchPendingStudentCertificates } from "@/lib/studentCertificates"
 
 // No role guard here by design: middleware.ts already redirects any
 // non-teacher away from /teacher/*, matching every sibling teacher page.
@@ -63,7 +70,55 @@ const quickActions = [
   { label: "Search Student", icon: Search },
 ]
 
+function PendingReviewCard({
+  href,
+  label,
+  caption,
+  icon: Icon,
+  accent,
+  count,
+  isLoading,
+  isError,
+}: {
+  href: string
+  label: string
+  caption: string
+  icon: typeof ClipboardCheck
+  accent: string
+  count: number | undefined
+  isLoading: boolean
+  isError: boolean
+}) {
+  return (
+    <Link href={href} className="block">
+      <Card className={`border-l-4 py-4 transition-colors hover:bg-accent ${accent}`}>
+        <CardContent className="flex items-start justify-between gap-2 px-4">
+          <div className="space-y-1">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+            <p className="text-3xl font-bold text-foreground">
+              {isLoading ? "…" : isError ? "—" : count}
+            </p>
+            <p className="text-xs text-muted-foreground">{isError ? "Failed to load" : caption}</p>
+          </div>
+          <Icon className={`h-5 w-5 shrink-0 ${accent.split(" ")[1]}`} />
+        </CardContent>
+      </Card>
+    </Link>
+  )
+}
+
 export default function TeacherDashboardPage() {
+  const pendingActivities = useQuery({
+    queryKey: ["pending-activities"],
+    queryFn: fetchPendingActivities,
+    retry: false,
+  })
+  const pendingCertificates = useQuery({
+    queryKey: ["pending-student-certificates"],
+    queryFn: fetchPendingStudentCertificates,
+    retry: false,
+  })
+
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <div>
@@ -74,7 +129,7 @@ export default function TeacherDashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {stats.map((stat) => (
           <Card key={stat.label} className={`border-l-4 py-4 ${stat.accent}`}>
             <CardContent className="flex items-start justify-between gap-2 px-4">
@@ -87,6 +142,20 @@ export default function TeacherDashboardPage() {
             </CardContent>
           </Card>
         ))}
+        <PendingReviewCard
+          href="/teacher/pending-activities"
+          label="Pending Approvals"
+          caption="Activities & certificates awaiting review"
+          icon={ClipboardCheck}
+          accent="border-l-orange-500 text-orange-500"
+          count={
+            pendingActivities.data && pendingCertificates.data
+              ? pendingActivities.data.length + pendingCertificates.data.length
+              : undefined
+          }
+          isLoading={pendingActivities.isLoading || pendingCertificates.isLoading}
+          isError={pendingActivities.isError || pendingCertificates.isError}
+        />
       </div>
 
       <Card>

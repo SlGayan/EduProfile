@@ -23,7 +23,14 @@ import {
 } from '../modules/activities/activities.controller.js';
 import { listMyMaterials } from '../modules/materials/materials.controller.js';
 import { uploadBlob, deleteBlob, getInlineSasUrl } from '../modules/materials/materials.blob.js';
-import { findCertificateByIdParam, streamCertificatePdf } from '../modules/certificates/certificates.controller.js';
+import { listMyCertificates, getMyCertificatePdf } from '../modules/certificates/certificates.controller.js';
+import {
+  listMyStudentCertificates,
+  submitMyStudentCertificate,
+  updateMyStudentCertificate,
+  downloadMyStudentCertificateFile,
+} from '../modules/studentCertificates/studentCertificates.controller.js';
+import { uploadCertificateFile } from '../modules/studentCertificates/studentCertificates.upload.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -255,54 +262,35 @@ router.post('/me/photo', requireRole(['STUDENT']), uploadPhotoFile, async (req: 
   }
 });
 
-router.get('/me/certificates', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
-  try {
-    const student = await prisma.student.findUnique({
-      where: { userId: req.user!.id, user: { deletedAt: null } },
-      select: { id: true },
-    });
-    if (!student) {
-      return res.status(404).json({ error: 'No student profile found for this account' });
-    }
+// Story: the caller's own character certificates. Same route-ordering rule as
+// /me/activities and /me/materials above: must stay above the `/:id/...`
+// routes at the bottom of this file, or it would match id="me" there and 403
+// before reaching this handler. Handlers live in the certificates module
+// (mirrors listMyActivities/listMyMaterials living in their own modules).
+router.get('/me/certificates', requireRole(['STUDENT']), listMyCertificates);
+router.get('/me/certificates/:id/pdf', requireRole(['STUDENT']), getMyCertificatePdf);
 
-    const certificates = await prisma.characterCertificate.findMany({
-      where: { studentId: student.id },
-      select: { id: true, issuedAt: true, characterGrade: true },
-      orderBy: { issuedAt: 'desc' },
-    });
-
-    return res.status(200).json(certificates);
-  } catch (err) {
-    console.error('Error listing own certificates:', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Deliberately its own /me/... route (not nested under a generic
-// certificate-download endpoint) so the STUDENT role guard applies before
-// the ownership check below — same route-ordering rationale as the other
-// /me/* routes in this file.
-router.get('/me/certificates/:id/pdf', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
-  try {
-    const student = await prisma.student.findUnique({
-      where: { userId: req.user!.id, user: { deletedAt: null } },
-      select: { id: true },
-    });
-    if (!student) {
-      return res.status(404).json({ error: 'No student profile found for this account' });
-    }
-
-    const certificate = await findCertificateByIdParam(req.params.id as string);
-    if (!certificate || certificate.studentId !== student.id) {
-      return res.status(404).json({ error: 'Certificate not found' });
-    }
-
-    streamCertificatePdf(certificate, res);
-  } catch (err) {
-    console.error('Error fetching own certificate PDF:', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// Self-added certificates (external course/competition certificates the
+// student reports, distinct from the principal-issued CharacterCertificate
+// above). Same route-ordering rule: must stay above `/:id/...` below.
+router.get('/me/student-certificates', requireRole(['STUDENT']), listMyStudentCertificates);
+router.post(
+  '/me/student-certificates',
+  requireRole(['STUDENT']),
+  uploadCertificateFile,
+  submitMyStudentCertificate
+);
+router.patch(
+  '/me/student-certificates/:id',
+  requireRole(['STUDENT']),
+  uploadCertificateFile,
+  updateMyStudentCertificate
+);
+router.get(
+  '/me/student-certificates/:id/file',
+  requireRole(['STUDENT']),
+  downloadMyStudentCertificateFile
+);
 
 // Story 8.4 — the caller's own activities.
 //

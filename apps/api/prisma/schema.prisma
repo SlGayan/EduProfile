@@ -29,6 +29,8 @@ model User {
   student   Student?
   teacher   Teacher?
   issuedCertificates CharacterCertificate[]
+  reviewedActivities ExtracurricularActivity[]
+  reviewedStudentCertificates StudentCertificate[]
 }
 
 enum StudentStatus {
@@ -57,6 +59,7 @@ model Student {
   termMarks   TermMark[]
   activities  ExtracurricularActivity[]
   certificates CharacterCertificate[]
+  studentCertificates StudentCertificate[]
   guardian    Guardian?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -142,6 +145,9 @@ model ExtracurricularActivity {
   evidenceUrl  String?
   status       ActivityStatus @default(PENDING)
   teacherNote  String?
+  reviewedById Int?
+  reviewedBy   User?     @relation(fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -189,4 +195,40 @@ model CharacterCertificate {
 
   @@index([studentId])
   @@index([principalId])
+}
+
+enum StudentCertificateStatus {
+  PENDING
+  APPROVED
+  NEEDS_CORRECTION
+  REJECTED
+}
+
+// A certificate the student self-reports (e.g. an external course or
+// competition certificate), distinct from CharacterCertificate above (which
+// the principal issues from within the school). Goes through the same
+// PENDING -> APPROVED/NEEDS_CORRECTION/REJECTED review workflow as
+// ExtracurricularActivity so a teacher/admin can verify it before it counts
+// as confirmed on the student's record.
+model StudentCertificate {
+  id                  Int      @id @default(autoincrement())
+  studentId           Int
+  student             Student  @relation(fields: [studentId], references: [id])
+  title               String
+  issuingOrganization String
+  issueDate           DateTime
+  category            String?
+  description         String?
+  evidenceUrl         String?
+  fileUrl             String?
+  fileType            String?
+  status              StudentCertificateStatus @default(PENDING)
+  teacherNote         String?
+  reviewedById        Int?
+  reviewedBy          User?    @relation(fields: [reviewedById], references: [id])
+  reviewedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([studentId])
 }

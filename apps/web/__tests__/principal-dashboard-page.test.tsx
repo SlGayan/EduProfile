@@ -30,7 +30,12 @@ function renderPage() {
 }
 
 function mockApi(analytics: unknown, ok = true, status = 200) {
-  apiFetchMock.mockImplementation(() => Promise.resolve(jsonResponse(analytics, ok, status)))
+  apiFetchMock.mockImplementation((url: string) => {
+    if (url === "/api/certificates/eligible-count") {
+      return Promise.resolve(jsonResponse({ count: 0 }))
+    }
+    return Promise.resolve(jsonResponse(analytics, ok, status))
+  })
 }
 
 beforeEach(() => {

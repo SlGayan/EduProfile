@@ -1,13 +1,8 @@
 /**
  * Types and pure helpers for the extracurricular activities feature.
- *
- * NOTE: this is a deliberate STRICT SUBSET of the same file on the Story 8.3
- * branch (`feat/web/extracurricular-activity-ui`), which additionally exports
- * `canManageActivities` and `extractApiError` for the teacher-facing UI.
- * Story 8.4 needs neither — it has no form and no role gate — so they are
- * omitted here. Everything below is byte-identical to 8.3's version, so when
- * that branch merges, resolving the conflict is "take theirs" with no loss.
  */
+
+import { apiFetch } from "@/lib/apiFetch"
 
 /**
  * An activity as returned by the API.
@@ -27,6 +22,8 @@ export interface Activity {
   status?: "PENDING" | "APPROVED" | "NEEDS_CORRECTION" | "REJECTED"
   evidenceUrl?: string | null
   teacherNote?: string | null
+  reviewedByName?: string | null
+  reviewedAt?: string | null
   studentName?: string
   admissionNumber?: string | null
 }
@@ -50,4 +47,17 @@ export function formatDateRange(startDate: string, endDate: string | null): stri
   const start = toDateInputValue(startDate)
   const end = endDate ? toDateInputValue(endDate) : ""
   return `${start} – ${end || "Ongoing"}`
+}
+
+/**
+ * Shared with the teacher dashboard's pending-activities stat card: both use
+ * the query key "pending-activities" so the count and the full review table
+ * read from the same cache entry instead of issuing duplicate requests.
+ */
+export async function fetchPendingActivities(): Promise<Activity[]> {
+  const response = await apiFetch("/api/teachers/me/pending-activities")
+  if (!response.ok) {
+    throw new Error("Failed to load pending activities")
+  }
+  return response.json()
 }
