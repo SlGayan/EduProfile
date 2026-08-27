@@ -277,13 +277,14 @@ export default function TeacherMaterialsPage() {
   const canSubmit = !!file && !fileError && hasTarget && !uploadMutation.isPending
 
   function classOrSubjectName(m: StudyMaterial): string {
+    const parts: string[] = []
     if (m.classId) {
-      return mergedClasses.find((c) => c.id === m.classId)?.name ?? `Class #${m.classId}`
+      parts.push(mergedClasses.find((c) => c.id === m.classId)?.name ?? `Class #${m.classId}`)
     }
     if (m.subjectId) {
-      return subjects.find((s) => s.id === m.subjectId)?.name ?? `Subject #${m.subjectId}`
+      parts.push(subjects.find((s) => s.id === m.subjectId)?.name ?? `Subject #${m.subjectId}`)
     }
-    return "—"
+    return parts.length > 0 ? parts.join(" / ") : "—"
   }
 
   if (!isAuthorized) {
