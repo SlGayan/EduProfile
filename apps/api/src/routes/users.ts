@@ -69,20 +69,30 @@ router.post('/', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) =
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email: normalizedEmail,
-        password: hashedPassword,
-        role,
-      },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    // Create user, along with a Teacher profile if applicable
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          password: hashedPassword,
+          role,
+        },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (role === 'TEACHER') {
+        await tx.teacher.create({
+          data: { userId: createdUser.id },
+        });
+      }
+
+      return createdUser;
     });
 
     return res.status(201).json({ user });
@@ -154,17 +164,28 @@ router.put('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res)
       updateData.role = role;
     }
 
-    // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    // Update user, creating a Teacher profile if the role is being changed to TEACHER
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const result = await tx.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (role === 'TEACHER') {
+        const existingTeacher = await tx.teacher.findUnique({ where: { userId } });
+        if (!existingTeacher) {
+          await tx.teacher.create({ data: { userId } });
+        }
+      }
+
+      return result;
     });
 
     return res.status(200).json({ user: updatedUser });
