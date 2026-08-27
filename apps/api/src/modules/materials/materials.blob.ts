@@ -1,3 +1,5 @@
+import fs from 'fs/promises';
+import path from 'path';
 import {
   BlobServiceClient,
   BlobSASPermissions,
@@ -6,6 +8,29 @@ import {
   type UserDelegationKey,
 } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
+
+/**
+ * Dev-only escape hatch: if an actual Azure call fails (e.g. no `az login`,
+ * no Azure CLI installed, no role assignment yet) and we're not in
+ * production, fall back to storing/serving the blob from local disk instead
+ * of hard-failing the request. Never engages in production (Dockerfile sets
+ * NODE_ENV=production), and never engages for a teammate whose Azure access
+ * already works -- it only triggers on an actual thrown error.
+ */
+const DEV_FALLBACK_ENABLED = process.env.NODE_ENV !== 'production';
+// No leading dot: Express's `send` module (used by res.download) treats any
+// dotfile path segment as forbidden by default and 404s it even when the
+// file exists.
+const LOCAL_BLOB_DIR = path.join(process.cwd(), 'local-blob-storage');
+
+function localBlobPath(key: string): string {
+  return path.join(LOCAL_BLOB_DIR, key);
+}
+
+/** Used by materials.controller's dev-only local-blob route to stream the file back. */
+export function getLocalBlobAbsolutePath(key: string): string {
+  return localBlobPath(key);
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -46,9 +71,16 @@ const DELEGATION_KEY_TTL_MS = 60 * 60 * 1000;
 const DELEGATION_KEY_REFRESH_MARGIN_MS = SAS_TTL_MS + 2 * 60 * 1000;
 
 export async function uploadBlob(key: string, data: Buffer, contentType: string): Promise<void> {
-  const { containerClient } = getClients();
-  const blockBlobClient = containerClient.getBlockBlobClient(key);
-  await blockBlobClient.uploadData(data, { blobHTTPHeaders: { blobContentType: contentType } });
+  try {
+    const { containerClient } = getClients();
+    const blockBlobClient = containerClient.getBlockBlobClient(key);
+    await blockBlobClient.uploadData(data, { blobHTTPHeaders: { blobContentType: contentType } });
+  } catch (err) {
+    if (!DEV_FALLBACK_ENABLED) throw err;
+    console.warn(`[materials.blob] Azure upload failed, using local disk fallback (dev only): ${(err as Error).message}`);
+    await fs.mkdir(LOCAL_BLOB_DIR, { recursive: true });
+    await fs.writeFile(localBlobPath(key), data);
+  }
 }
 
 /**
@@ -57,15 +89,39 @@ export async function uploadBlob(key: string, data: Buffer, contentType: string)
  * behavior) -- callers never need to branch on this.
  */
 export async function deleteBlob(key: string): Promise<void> {
-  const { containerClient } = getClients();
-  const blockBlobClient = containerClient.getBlockBlobClient(key);
-  await blockBlobClient.deleteIfExists();
+  if (DEV_FALLBACK_ENABLED) {
+    const deletedLocally = await fs.unlink(localBlobPath(key)).then(
+      () => true,
+      (err) => {
+        if (err.code === 'ENOENT') return false;
+        throw err;
+      }
+    );
+    if (deletedLocally) return;
+  }
+  try {
+    const { containerClient } = getClients();
+    const blockBlobClient = containerClient.getBlockBlobClient(key);
+    await blockBlobClient.deleteIfExists();
+  } catch (err) {
+    if (!DEV_FALLBACK_ENABLED) throw err;
+    console.warn(`[materials.blob] Azure delete failed, ignoring (dev only): ${(err as Error).message}`);
+  }
 }
 
 export async function blobExists(key: string): Promise<boolean> {
-  const { containerClient } = getClients();
-  const blockBlobClient = containerClient.getBlockBlobClient(key);
-  return blockBlobClient.exists();
+  if (DEV_FALLBACK_ENABLED) {
+    const existsLocally = await fs.access(localBlobPath(key)).then(() => true, () => false);
+    if (existsLocally) return true;
+  }
+  try {
+    const { containerClient } = getClients();
+    const blockBlobClient = containerClient.getBlockBlobClient(key);
+    return await blockBlobClient.exists();
+  } catch (err) {
+    if (!DEV_FALLBACK_ENABLED) throw err;
+    return false;
+  }
 }
 
 /**
@@ -119,6 +175,16 @@ async function getCachedUserDelegationKey(
  * the caller's own Managed Identity through getUserDelegationKey.
  */
 export async function getDownloadSasUrl(key: string, downloadFilename: string): Promise<string> {
+  if (DEV_FALLBACK_ENABLED) {
+    const existsLocally = await fs.access(localBlobPath(key)).then(() => true, () => false);
+    if (existsLocally) {
+      // Relative path: downloadMaterial's 302 redirect resolves it against
+      // this same API origin, so no CORS concerns even through the Next.js
+      // rewrite proxy.
+      return `/api/materials/local-blob/${encodeURIComponent(key)}?filename=${encodeURIComponent(downloadFilename)}`;
+    }
+  }
+
   const { blobServiceClient, containerClient } = getClients();
   const now = new Date();
   const startsOn = new Date(now.valueOf() - CLOCK_SKEW_MS);

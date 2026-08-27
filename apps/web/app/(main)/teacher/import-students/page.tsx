@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Download, Loader2, Upload } from "lucide-react"
 import { getCurrentUser } from "@/lib/auth"
 
@@ -23,10 +25,18 @@ const TEMPLATE_COLUMNS = [
   "alYear",
 ]
 
+interface ImportedStudent {
+  indexNumber: string
+  fullName: string
+  email: string
+  status: "created" | "updated"
+}
+
 interface ImportSuccess {
   message: string
   created: number
   updated: number
+  students: ImportedStudent[]
 }
 
 interface ImportErrorInfo {
@@ -198,12 +208,41 @@ export default function ImportStudentsPage() {
           )}
 
           {lastResult && !importError && (
-            <Alert>
-              <AlertTitle>{lastResult.message}</AlertTitle>
-              <AlertDescription>
-                Created {lastResult.created}, updated {lastResult.updated}.
-              </AlertDescription>
-            </Alert>
+            <div className="space-y-3">
+              <Alert>
+                <AlertTitle>{lastResult.message}</AlertTitle>
+                <AlertDescription>
+                  Created {lastResult.created}, updated {lastResult.updated}.
+                </AlertDescription>
+              </Alert>
+
+              {lastResult.students.length > 0 && (
+                <div className="overflow-x-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Index Number</TableHead>
+                        <TableHead>Full Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead className="text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {lastResult.students.map((s) => (
+                        <TableRow key={s.indexNumber}>
+                          <TableCell className="font-medium">{s.indexNumber}</TableCell>
+                          <TableCell>{s.fullName}</TableCell>
+                          <TableCell>{s.email}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={s.status === "created" ? "default" : "secondary"}>{s.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
         <CardFooter>

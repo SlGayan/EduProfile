@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -38,6 +38,7 @@ import {
   type StudyMaterial,
   type ClassOption,
   type SubjectOption,
+  type SubjectAssignment,
 } from "@/lib/materials"
 
 const materialSchema = z.object({
@@ -130,8 +131,40 @@ export default function TeacherMaterialsPage() {
     retry: false,
   })
 
+  // Story 9.3 AC #3: a teacher may also hold a subject-teaching assignment
+  // for a class she doesn't own — GET /api/teachers/me/classes intentionally
+  // stays "owned only" (other pages depend on that), so we merge in
+  // /api/teachers/me/subject-assignments here instead. If this query fails,
+  // degrade gracefully to owned classes only rather than blanking the picker.
+  const {
+    data: subjectAssignments = [],
+    isLoading: subjectAssignmentsLoading,
+    isError: subjectAssignmentsError,
+  } = useQuery({
+    queryKey: ["teacher-subject-assignments"],
+    queryFn: () =>
+      fetchJson<SubjectAssignment[]>(
+        "/api/teachers/me/subject-assignments",
+        "Failed to fetch subject assignments"
+      ),
+    retry: false,
+  })
+
+  // Merge owned classes with subject-assigned classes, deduplicated by id.
+  // Owned classes win on conflicting names (there shouldn't be any, since
+  // both sources ultimately name the same class row).
+  const mergedClasses = useMemo<ClassOption[]>(() => {
+    const byId = new Map<string, ClassOption>()
+    for (const c of classes) byId.set(c.id, c)
+    for (const a of subjectAssignments) {
+      if (!byId.has(a.classId)) byId.set(a.classId, { id: a.classId, name: a.className })
+    }
+    return Array.from(byId.values())
+  }, [classes, subjectAssignments])
+
   // GET /api/materials requires exactly one of classId/subjectId per call —
-  // query once per teacher-assigned class and merge, deduplicating by id.
+  // query once per class the teacher may upload to (owned + subject-assigned)
+  // and merge, deduplicating by id.
   // Known gap (Story 9.3 Open Question 2): a teacher with zero assigned
   // classes will not see subject-only materials here.
   const {
@@ -139,10 +172,10 @@ export default function TeacherMaterialsPage() {
     isLoading: materialsLoading,
     isError: materialsError,
   } = useQuery({
-    queryKey: ["materials", classes.map((c) => c.id)],
+    queryKey: ["materials", mergedClasses.map((c) => c.id)],
     queryFn: async () => {
       const results = await Promise.all(
-        classes.map((c) =>
+        mergedClasses.map((c) =>
           fetchJson<StudyMaterial[]>(`/api/materials?classId=${c.id}`, "Failed to fetch materials")
         )
       )
@@ -152,7 +185,7 @@ export default function TeacherMaterialsPage() {
       }
       return Array.from(merged.values())
     },
-    enabled: classes.length > 0,
+    enabled: mergedClasses.length > 0,
     retry: false,
   })
 
@@ -244,13 +277,14 @@ export default function TeacherMaterialsPage() {
   const canSubmit = !!file && !fileError && hasTarget && !uploadMutation.isPending
 
   function classOrSubjectName(m: StudyMaterial): string {
+    const parts: string[] = []
     if (m.classId) {
-      return classes.find((c) => c.id === m.classId)?.name ?? `Class #${m.classId}`
+      parts.push(mergedClasses.find((c) => c.id === m.classId)?.name ?? `Class #${m.classId}`)
     }
     if (m.subjectId) {
-      return subjects.find((s) => s.id === m.subjectId)?.name ?? `Subject #${m.subjectId}`
+      parts.push(subjects.find((s) => s.id === m.subjectId)?.name ?? `Subject #${m.subjectId}`)
     }
-    return "—"
+    return parts.length > 0 ? parts.join(" / ") : "—"
   }
 
   if (!isAuthorized) {
@@ -273,35 +307,40 @@ export default function TeacherMaterialsPage() {
             onSubmit={form.handleSubmit((values) => uploadMutation.mutate(values))}
             className="space-y-4"
           >
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="material-title">Title</Label>
               <Input id="material-title" {...form.register("title")} className="w-full" />
               {form.formState.errors.title && (
-                <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
+                <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
               )}
             </div>
 
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="material-description">Description (optional)</Label>
               <Textarea id="material-description" {...form.register("description")} className="w-full" />
               {form.formState.errors.description && (
-                <p className="text-xs text-destructive mt-1">{form.formState.errors.description.message}</p>
+                <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
               )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+              <div className="grid gap-2">
                 <Label htmlFor="material-class">Class</Label>
-                {classesError ? (
+                {classesError && mergedClasses.length === 0 ? (
                   <p className="text-xs text-destructive">Failed to load classes.</p>
                 ) : (
-                  <Select value={classId} onValueChange={setClassId} disabled={classesLoading}>
+                  <Select
+                    name="classId"
+                    value={classId}
+                    onValueChange={setClassId}
+                    disabled={classesLoading || subjectAssignmentsLoading}
+                  >
                     <SelectTrigger id="material-class" className="w-full">
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No class</SelectItem>
-                      {classes.map((c) => (
+                      {mergedClasses.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.name}
                         </SelectItem>
@@ -309,13 +348,18 @@ export default function TeacherMaterialsPage() {
                     </SelectContent>
                   </Select>
                 )}
+                {!classesError && subjectAssignmentsError && (
+                  <p className="text-xs text-destructive">
+                    Failed to load subject-assigned classes. Showing your owned classes only.
+                  </p>
+                )}
               </div>
-              <div>
+              <div className="grid gap-2">
                 <Label htmlFor="material-subject">Subject</Label>
                 {subjectsError ? (
                   <p className="text-xs text-destructive">Failed to load subjects.</p>
                 ) : (
-                  <Select value={subjectId} onValueChange={setSubjectId} disabled={subjectsLoading}>
+                  <Select name="subjectId" value={subjectId} onValueChange={setSubjectId} disabled={subjectsLoading}>
                     <SelectTrigger id="material-subject" className="w-full">
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
@@ -335,22 +379,23 @@ export default function TeacherMaterialsPage() {
               <p className="text-xs text-muted-foreground">Select at least one of class or subject.</p>
             )}
 
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="material-file">File</Label>
               <Input
                 id="material-file"
+                name="file"
                 type="file"
                 accept={ALLOWED_MATERIAL_MIME_TYPES.join(",")}
                 className="cursor-pointer w-full"
                 onChange={handleFileChange}
               />
               {file && !fileError && (
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-muted-foreground">
                   {file.name} ({formatFileSize(file.size)})
                 </p>
               )}
-              {fileError && <p className="text-xs text-destructive mt-1">{fileError}</p>}
-              <p className="text-xs text-muted-foreground mt-1">
+              {fileError && <p className="text-xs text-destructive">{fileError}</p>}
+              <p className="text-xs text-muted-foreground">
                 PDF, DOC/DOCX, or image. Max {MAX_MATERIAL_UPLOAD_MB}MB.
               </p>
             </div>
@@ -383,7 +428,7 @@ export default function TeacherMaterialsPage() {
             <Alert variant="destructive">
               <AlertDescription>Failed to load materials.</AlertDescription>
             </Alert>
-          ) : materialsLoading && classes.length > 0 ? (
+          ) : materialsLoading && mergedClasses.length > 0 ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-10 w-full" />

@@ -3,3 +3,6 @@ node_modules
 .env
 
 /generated/prisma
+
+# Dev-only local disk fallback for study-material blobs (see materials.blob.ts)
+local-blob-storage/
