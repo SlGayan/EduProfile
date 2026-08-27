@@ -1,12 +1,8 @@
 /**
  * Types and pure helpers for the extracurricular activities feature.
  *
- * NOTE: this is a deliberate STRICT SUBSET of the same file on the Story 8.3
- * branch (`feat/web/extracurricular-activity-ui`), which additionally exports
- * `canManageActivities` and `extractApiError` for the teacher-facing UI.
- * Story 8.4 needs neither — it has no form and no role gate — so they are
- * omitted here. Everything below is byte-identical to 8.3's version, so when
- * that branch merges, resolving the conflict is "take theirs" with no loss.
+ * `extractApiError` backs the teacher-facing Add Student Activity page;
+ * Story 8.4's read-only student view uses only `Activity`/`formatDateRange`.
  */
 
 /**
@@ -50,4 +46,38 @@ export function formatDateRange(startDate: string, endDate: string | null): stri
   const start = toDateInputValue(startDate)
   const end = endDate ? toDateInputValue(endDate) : ""
   return `${start} – ${end || "Ongoing"}`
+}
+
+interface ZodIssueLike {
+  path?: unknown
+  message?: unknown
+}
+
+/**
+ * Turns a JSON error body into a message worth showing a teacher.
+ *
+ * A Zod validation failure comes back as `{ error: 'Invalid input', details:
+ * [...] }` — "Invalid input" alone names nothing, so the first issue's own
+ * message is used instead, prefixed with its field name unless that field is
+ * already named inside the message (e.g. "endDate must be on or after
+ * startDate" doesn't need "endDate: " glued on front).
+ */
+export function extractApiError(body: unknown, fallback: string): string {
+  if (body && typeof body === "object") {
+    const obj = body as { error?: unknown; details?: unknown }
+    if (Array.isArray(obj.details) && obj.details.length > 0) {
+      const first = obj.details[0] as ZodIssueLike
+      if (first && typeof first.message === "string") {
+        const field = Array.isArray(first.path) && first.path.length > 0 ? String(first.path[0]) : ""
+        if (field && !first.message.toLowerCase().includes(field.toLowerCase())) {
+          return `${field}: ${first.message}`
+        }
+        return first.message
+      }
+    }
+    if (typeof obj.error === "string") {
+      return obj.error
+    }
+  }
+  return fallback
 }

@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
+import { createMarkSchema } from '../../validators/markValidators.js';
 
 const prisma = new PrismaClient();
 
@@ -170,6 +171,88 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
 
   } catch (err: any) {
     console.error('Import marks error:', err);
+    return res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+};
+
+// POST /api/marks — single-record equivalent of `/import`'s per-row logic:
+// same field rules, same class-ownership check, same subject/mark upsert.
+export const createMark = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user || req.user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Unauthorized: Only teachers can add marks' });
+    }
+
+    const parsed = createMarkSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+    }
+    const { studentIndexNumber, subjectName, term, year, marks } = parsed.data;
+
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId: req.user.id, user: { deletedAt: null } },
+      include: { classes: true },
+    });
+
+    if (!teacher) {
+      return res.status(403).json({ error: 'Teacher profile not found' });
+    }
+
+    const teacherClassIds = teacher.classes.map((c) => c.id);
+    if (teacherClassIds.length === 0) {
+      return res.status(403).json({ error: 'Teacher is not assigned to any classes' });
+    }
+
+    const student = await prisma.student.findFirst({
+      where: { indexNumber: studentIndexNumber, user: { deletedAt: null } },
+      include: { classes: true },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: `Student with index number ${studentIndexNumber} not found` });
+    }
+
+    const isTeacherOfStudent = student.classes.some((c) => teacherClassIds.includes(c.id));
+    if (!isTeacherOfStudent) {
+      return res
+        .status(403)
+        .json({ error: `You do not have permission to modify marks for student ${studentIndexNumber}` });
+    }
+
+    const mark = await prisma.$transaction(async (tx) => {
+      // Upsert the subject inside the transaction, matching `importMarks` —
+      // a brand-new subject name is never left committed if the mark write fails.
+      const subject = await tx.subject.upsert({
+        where: { name: subjectName },
+        update: {},
+        create: { name: subjectName },
+      });
+
+      const existing = await tx.termMark.findUnique({
+        where: { studentId_subjectId_term_year: { studentId: student.id, subjectId: subject.id, term, year } },
+        select: { id: true },
+      });
+
+      const termMark = await tx.termMark.upsert({
+        where: { studentId_subjectId_term_year: { studentId: student.id, subjectId: subject.id, term, year } },
+        update: { marks },
+        create: { studentId: student.id, subjectId: subject.id, term, year, marks },
+      });
+
+      return { termMark, subjectName: subject.name, created: existing === null };
+    });
+
+    return res.status(mark.created ? 201 : 200).json({
+      id: String(mark.termMark.id),
+      studentName: student.fullName,
+      studentIndexNumber: student.indexNumber,
+      subject: mark.subjectName,
+      term: mark.termMark.term,
+      year: mark.termMark.year,
+      marks: mark.termMark.marks,
+    });
+  } catch (err: any) {
+    console.error('Create mark error:', err);
     return res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 };
