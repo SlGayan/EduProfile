@@ -62,48 +62,72 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'CSV file is empty' });
     }
     
-    // Look up Teacher to ensure they exist and get their classes
+    // Look up Teacher to ensure they exist and get their owned classes plus
+    // any per-class/subject teaching assignments (Story 12.3).
     const teacher = await prisma.teacher.findUnique({
       where: { userId: teacherUserId, user: { deletedAt: null } },
-      include: { classes: true }
+      include: { classes: true, subjectAssignments: true }
     });
-    
+
     if (!teacher) {
       return res.status(403).json({ error: 'Teacher profile not found' });
     }
-    
+
     const teacherClassIds = teacher.classes.map(c => c.id);
-    if (teacherClassIds.length === 0) {
+    if (teacherClassIds.length === 0 && teacher.subjectAssignments.length === 0) {
       return res.status(403).json({ error: 'Teacher is not assigned to any classes' });
     }
 
     // Get unique students and subjects
     const uniqueIndexNumbers = [...new Set(parsedRows.map(r => r.studentIndexNumber))];
     const uniqueSubjectNames = [...new Set(parsedRows.map(r => r.subjectName))];
-    
+
     // Fetch students
     const students = await prisma.student.findMany({
       where: { indexNumber: { in: uniqueIndexNumbers }, user: { deletedAt: null } },
       include: { classes: true }
     });
-    
+
     const studentMap = new Map(students.map(s => [s.indexNumber, s]));
-    
-    // Ensure all students exist and are in the teacher's classes
+
+    // Resolve subject names to ids up front so the per-row authorization
+    // check below can be subject-aware; brand-new subjects (no existing
+    // Subject row) can never match an assignment, so they're left out of
+    // this lookup on purpose.
+    const existingSubjects = await prisma.subject.findMany({
+      where: { name: { in: uniqueSubjectNames } },
+    });
+    const subjectIdByName = new Map(existingSubjects.map(s => [s.name, s.id]));
+
+    // classId:subjectId pairs the teacher is explicitly assigned to teach,
+    // independent of Class.teacherId ownership.
+    const assignedClassSubjectPairs = new Set(
+      teacher.subjectAssignments.map(a => `${a.classId}:${a.subjectId}`)
+    );
+
+    // Ensure all students exist and the teacher may edit marks for them:
+    // either the teacher owns one of the student's classes, or the teacher
+    // has a TeacherSubjectAssignment for the student's class and this row's
+    // subject.
     for (const row of parsedRows) {
       const student = studentMap.get(row.studentIndexNumber);
       if (!student) {
         return res.status(400).json({ error: `Student with index number ${row.studentIndexNumber} not found` });
       }
-      
+
       const studentClassIds = student.classes.map(c => c.id);
-      const isTeacherOfStudent = studentClassIds.some(cId => teacherClassIds.includes(cId));
-      
-      if (!isTeacherOfStudent) {
+      const ownsAClass = studentClassIds.some(cId => teacherClassIds.includes(cId));
+
+      const rowSubjectId = subjectIdByName.get(row.subjectName);
+      const hasSubjectAssignment =
+        rowSubjectId !== undefined &&
+        studentClassIds.some(cId => assignedClassSubjectPairs.has(`${cId}:${rowSubjectId}`));
+
+      if (!ownsAClass && !hasSubjectAssignment) {
         return res.status(403).json({ error: `You do not have permission to modify marks for student ${row.studentIndexNumber}` });
       }
     }
-    
+
     await prisma.$transaction(async (tx) => {
       // Upsert subjects inside the transaction so a brand-new subject name
       // can never be left committed if the import fails partway through.
@@ -221,14 +245,22 @@ export const getClassMarks = async (req: AuthRequest, res: Response) => {
 
     const teacher = await prisma.teacher.findUnique({
       where: { userId: req.user.id, user: { deletedAt: null } },
-      include: { classes: true },
+      include: { classes: true, subjectAssignments: true },
     });
 
     if (!teacher) {
       return res.status(403).json({ error: 'Teacher profile not found' });
     }
 
-    const teacherClassIds = teacher.classes.map((c) => c.id);
+    // View access is granted for a whole class if the teacher owns it OR has
+    // any TeacherSubjectAssignment in it (view is not subject-filtered, per
+    // Story 12.3 -- only editing via importMarks is subject-scoped).
+    const teacherClassIds = [
+      ...new Set([
+        ...teacher.classes.map((c) => c.id),
+        ...teacher.subjectAssignments.map((a) => a.classId),
+      ]),
+    ];
     if (teacherClassIds.length === 0) {
       return res.status(403).json({ error: 'Teacher is not assigned to any classes' });
     }
