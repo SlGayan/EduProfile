@@ -90,6 +90,7 @@ interface ApiClass {
   year: number | null
   teacherId: number | null
   teacher: ApiTeacherRecord | null
+  students: { id: number }[]
   _count: { students: number }
 }
 
@@ -211,9 +212,27 @@ function RosterModal({
     enabled: open,
   })
 
+  // Fetch all classes to detect students already enrolled elsewhere this year
+  const { data: allClasses = [] } = useQuery({
+    queryKey: ["classes"],
+    queryFn: fetchClasses,
+    enabled: open,
+  })
+
   const allStudents = allUsers.filter(
     (u) => u.role === "STUDENT" && u.student !== null,
   )
+
+  // studentId -> the other class (same year) they're already enrolled in
+  const otherEnrollments = new Map<number, ApiClass>()
+  if (classItem?.year != null) {
+    for (const c of allClasses) {
+      if (c.id === classItem.id || c.year !== classItem.year) continue
+      for (const s of c.students) {
+        if (!otherEnrollments.has(s.id)) otherEnrollments.set(s.id, c)
+      }
+    }
+  }
 
   const filteredStudents = studentSearch.trim().length >= 2
     ? allStudents.filter((u) => {
@@ -344,6 +363,7 @@ function RosterModal({
                     {filteredStudents.map((u) => {
                       const studentId = u.student!.id
                       const enrolled = enrolledStudentIds.has(studentId)
+                      const conflictClass = otherEnrollments.get(studentId)
                       return (
                         <TableRow key={u.id}>
                           <TableCell>
@@ -355,6 +375,10 @@ function RosterModal({
                           <TableCell className="text-right">
                             {enrolled ? (
                               <Badge variant="outline" className="text-xs">Enrolled</Badge>
+                            ) : conflictClass ? (
+                              <Badge variant="outline" className="text-xs">
+                                Enrolled — {conflictClass.name}
+                              </Badge>
                             ) : (
                               <Button
                                 size="sm"

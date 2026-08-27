@@ -17,6 +17,9 @@ router.get('/', async (req: AuthRequest, res) => {
                 teacher: {
                     include: { user: { select: { email: true } } }
                 },
+                students: {
+                    select: { id: true }
+                },
                 _count: {
                     select: { students: true }
                 }
@@ -180,6 +183,21 @@ router.post('/:id/students', async (req: AuthRequest, res) => {
 
         const existing = await prisma.class.findUnique({ where: { id } });
         if (!existing) return res.status(404).json({ error: 'Class not found' });
+
+        if (existing.year !== null) {
+            const conflict = await prisma.class.findFirst({
+                where: {
+                    id: { not: id },
+                    year: existing.year,
+                    students: { some: { id: studentId } }
+                }
+            });
+            if (conflict) {
+                return res.status(409).json({
+                    error: `Student is already enrolled in "${conflict.name}" for ${existing.year}`
+                });
+            }
+        }
 
         const updatedClass = await prisma.class.update({
             where: { id },
