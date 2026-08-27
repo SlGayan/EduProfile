@@ -119,7 +119,7 @@ interface ApiUser {
   email: string
   role: string
   teacher: { id: number } | null
-  student: { id: number } | null
+  student: { id: number; fullName: string; indexNumber: string } | null
 }
 
 // ---------------------------------------------------------------------------
@@ -216,9 +216,14 @@ function RosterModal({
   )
 
   const filteredStudents = studentSearch.trim().length >= 2
-    ? allStudents.filter((u) =>
-        u.email.toLowerCase().includes(studentSearch.toLowerCase()),
-      )
+    ? allStudents.filter((u) => {
+        const query = studentSearch.toLowerCase()
+        return (
+          u.email.toLowerCase().includes(query) ||
+          u.student!.fullName.toLowerCase().includes(query) ||
+          u.student!.indexNumber.toLowerCase().includes(query)
+        )
+      })
     : []
 
   const enrolledStudentIds = new Set(
@@ -325,7 +330,7 @@ function RosterModal({
           <div className="space-y-2 border-t pt-4">
             <h3 className="text-sm font-semibold">Add Student</h3>
             <Input
-              placeholder="Search by email (min 2 characters)…"
+              placeholder="Search by name, index number, or email (min 2 characters)…"
               value={studentSearch}
               onChange={(e) => setStudentSearch(e.target.value)}
             />
@@ -341,7 +346,12 @@ function RosterModal({
                       const enrolled = enrolledStudentIds.has(studentId)
                       return (
                         <TableRow key={u.id}>
-                          <TableCell>{u.email}</TableCell>
+                          <TableCell>
+                            <div>{u.student!.fullName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {u.student!.indexNumber} · {u.email}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
                             {enrolled ? (
                               <Badge variant="outline" className="text-xs">Enrolled</Badge>
