@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -60,6 +60,13 @@ function validate(fields: FormFields): string | null {
   return null
 }
 
+async function fetchMyClasses(): Promise<ClassOption[]> {
+  const res = await apiFetch("/api/teachers/me/classes")
+  if (!res.ok) return []
+  const data: { id: string; name: string }[] = await res.json()
+  return data.map((c) => ({ id: Number(c.id), name: c.name }))
+}
+
 interface ApiErrorInfo {
   title: string
   classes?: ClassOption[]
@@ -81,9 +88,21 @@ async function extractError(res: Response): Promise<ApiErrorInfo> {
 export default function AddStudentPage() {
   const [fields, setFields] = useState<FormFields>(emptyFields)
   const [classId, setClassId] = useState<string>("")
+  // Only set on a 400 that reports which classes are available — a fallback for
+  // the rare case the teacher's assignments changed after the page loaded.
+  // The normal case is handled by `myClasses` below.
   const [classOptions, setClassOptions] = useState<ClassOption[] | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<CreateResult | null>(null)
+
+  // Fetch the teacher's own classes up front, so a teacher on multiple classes
+  // sees the Class picker immediately instead of only after a failed submit.
+  const { data: myClasses } = useQuery({
+    queryKey: ["teacherClasses"],
+    queryFn: fetchMyClasses,
+  })
+
+  const visibleClassOptions = classOptions ?? (myClasses && myClasses.length > 1 ? myClasses : null)
 
   const setField = (key: keyof FormFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setFields((prev) => ({ ...prev, [key]: e.target.value }))
@@ -132,6 +151,10 @@ export default function AddStudentPage() {
     const error = validate(fields)
     if (error) {
       setFormError(error)
+      return
+    }
+    if (visibleClassOptions && !classId) {
+      setFormError("Select which class to enroll this student in")
       return
     }
     mutation.mutate()
@@ -207,7 +230,7 @@ export default function AddStudentPage() {
               <Input id="alYear" type="number" value={fields.alYear} onChange={setField("alYear")} />
             </div>
 
-            {classOptions && (
+            {visibleClassOptions && (
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="classId">Class</Label>
                 <Select value={classId} onValueChange={setClassId}>
@@ -215,7 +238,7 @@ export default function AddStudentPage() {
                     <SelectValue placeholder="Select a class" />
                   </SelectTrigger>
                   <SelectContent>
-                    {classOptions.map((c) => (
+                    {visibleClassOptions.map((c) => (
                       <SelectItem key={c.id} value={String(c.id)}>
                         {c.name}
                       </SelectItem>
