@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Trophy, Plus, Loader2, Paperclip } from "lucide-react"
+import { AlertCircle, Trophy, Plus, Loader2, Paperclip, Clock, CheckCircle2, AlertTriangle, XCircle, ListFilter } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { formatDateRange, toDateInputValue, type Activity } from "@/lib/activities"
 import { fetchMyStudentCertificates, extensionFromFileUrl, type StudentCertificate } from "@/lib/studentCertificates"
@@ -661,9 +661,20 @@ function normalizeCertificate(certificate: StudentCertificate): MyItem {
   }
 }
 
+type StatusFilter = "ALL" | "PENDING" | "APPROVED" | "NEEDS_CORRECTION" | "REJECTED"
+
+const STATUS_FILTERS: { value: StatusFilter; label: string; icon: typeof ListFilter }[] = [
+  { value: "ALL", label: "All", icon: ListFilter },
+  { value: "PENDING", label: "Pending", icon: Clock },
+  { value: "NEEDS_CORRECTION", label: "Needs Correction", icon: AlertTriangle },
+  { value: "REJECTED", label: "Rejected", icon: XCircle },
+  { value: "APPROVED", label: "Approved", icon: CheckCircle2 },
+]
+
 export default function StudentActivitiesPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL")
 
   const activitiesQuery = useQuery({
     queryKey: ["my-activities"],
@@ -684,6 +695,22 @@ export default function StudentActivitiesPage() {
     ...(certificatesQuery.data ?? []).map(normalizeCertificate),
   ].sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
 
+  const statusCounts = items.reduce<Record<StatusFilter, number>>(
+    (acc, item) => {
+      acc.ALL += 1
+      if (item.status) acc[item.status] += 1
+      return acc
+    },
+    { ALL: 0, PENDING: 0, APPROVED: 0, NEEDS_CORRECTION: 0, REJECTED: 0 }
+  )
+
+  const filteredItems = statusFilter === "ALL" ? items : items.filter((item) => item.status === statusFilter)
+
+  function handleFilterChange(next: StatusFilter) {
+    setStatusFilter(next)
+    setPage(1)
+  }
+
   async function handleDownload(item: MyItem) {
     if (downloadingId || !item.certificate) return
     setDownloadingId(item.id)
@@ -694,9 +721,9 @@ export default function StudentActivitiesPage() {
     }
   }
 
-  const pageCount = Math.max(1, Math.ceil(items.length / TABLE_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(filteredItems.length / TABLE_PAGE_SIZE))
   const currentPage = Math.min(page, pageCount)
-  const pagedItems = items.slice(
+  const pagedItems = filteredItems.slice(
     (currentPage - 1) * TABLE_PAGE_SIZE,
     currentPage * TABLE_PAGE_SIZE
   )
@@ -739,81 +766,125 @@ export default function StudentActivitiesPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Evidence</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pagedItems.map((item) => (
-                    <TableRow key={`${item.kind}-${item.id}`}>
-                      <TableCell>
-                        <Badge variant="secondary">{item.kind === "ACTIVITY" ? "Activity" : "Certificate"}</Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <div>{item.title}</div>
-                        {item.achievements && <div className="text-sm text-muted-foreground">{item.achievements}</div>}
-                        {item.teacherNote && (item.status === "NEEDS_CORRECTION" || item.status === "REJECTED") && (
-                          <div className="text-sm text-destructive mt-1">Note: {item.teacherNote}</div>
-                        )}
-                      </TableCell>
-                      <TableCell>{item.subtitle}</TableCell>
-                      <TableCell className="whitespace-nowrap">{item.dateDisplay}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          {item.evidenceUrl && (
-                            <a href={item.evidenceUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                              Link
-                            </a>
-                          )}
-                          {item.hasFile && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-auto p-0 text-primary hover:underline"
-                              disabled={downloadingId === item.id}
-                              onClick={() => handleDownload(item)}
-                            >
-                              {downloadingId === item.id ? (
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              ) : (
-                                <Paperclip className="mr-1 h-3 w-3" />
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {STATUS_FILTERS.map(({ value, label, icon: Icon }) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="sm"
+                    variant={statusFilter === value ? "secondary" : "ghost"}
+                    className="gap-1.5"
+                    onClick={() => handleFilterChange(value)}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {label} ({statusCounts[value]})
+                  </Button>
+                ))}
+              </div>
+              {filteredItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Nothing matches this filter.{" "}
+                    <button
+                      type="button"
+                      className="text-primary hover:underline"
+                      onClick={() => handleFilterChange("ALL")}
+                    >
+                      Show all
+                    </button>
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Item</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Evidence</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pagedItems.map((item) => (
+                        <TableRow
+                          key={`${item.kind}-${item.id}`}
+                          className={
+                            item.status === "NEEDS_CORRECTION"
+                              ? "bg-orange-50 hover:bg-orange-100/70 dark:bg-orange-950/20 dark:hover:bg-orange-950/30"
+                              : item.status === "REJECTED"
+                                ? "bg-red-50 hover:bg-red-100/70 dark:bg-red-950/20 dark:hover:bg-red-950/30"
+                                : undefined
+                          }
+                        >
+                          <TableCell>
+                            <Badge variant="secondary">{item.kind === "ACTIVITY" ? "Activity" : "Certificate"}</Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div>{item.title}</div>
+                            {item.achievements && <div className="text-sm text-muted-foreground">{item.achievements}</div>}
+                            {item.teacherNote && (item.status === "NEEDS_CORRECTION" || item.status === "REJECTED") && (
+                              <div className="text-sm text-destructive mt-1">Note: {item.teacherNote}</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="capitalize">{item.subtitle}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.dateDisplay}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              {item.evidenceUrl && (
+                                <a href={item.evidenceUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                                  Link
+                                </a>
                               )}
-                              File
-                            </Button>
-                          )}
-                          {!item.evidenceUrl && !item.hasFile && "—"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={item.status} />
-                        {item.reviewedByName && item.reviewedAt && (
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            by {item.reviewedByName} on {toDateInputValue(item.reviewedAt)}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {item.status === "NEEDS_CORRECTION" && item.activity && (
-                          <EditActivityDialog activity={item.activity} />
-                        )}
-                        {item.status === "NEEDS_CORRECTION" && item.certificate && (
-                          <EditCertificateDialog certificate={item.certificate} />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
+                              {item.hasFile && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-auto p-0 text-primary hover:underline"
+                                  disabled={downloadingId === item.id}
+                                  onClick={() => handleDownload(item)}
+                                >
+                                  {downloadingId === item.id ? (
+                                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Paperclip className="mr-1 h-3 w-3" />
+                                  )}
+                                  File
+                                </Button>
+                              )}
+                              {!item.evidenceUrl && !item.hasFile && "—"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={item.status} />
+                            {item.reviewedByName && item.reviewedAt && (
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                by {item.reviewedByName} on {toDateInputValue(item.reviewedAt)}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {item.status === "NEEDS_CORRECTION" && item.activity && (
+                              <EditActivityDialog activity={item.activity} />
+                            )}
+                            {item.status === "NEEDS_CORRECTION" && item.certificate && (
+                              <EditCertificateDialog certificate={item.certificate} />
+                            )}
+                            {item.status !== "NEEDS_CORRECTION" && (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
+                </div>
+              )}
             </div>
           )}
         </CardContent>
