@@ -18,8 +18,10 @@ import {
   FileSpreadsheet,
   ClipboardList,
   Search,
+  ClipboardCheck,
   Inbox,
 } from "lucide-react"
+import { fetchPendingActivities } from "@/lib/activities"
 import { fetchTeacherDashboard } from "@/lib/analytics"
 
 // No role guard here by design: middleware.ts already redirects any
@@ -51,7 +53,55 @@ function scopeLabel(scope: { year: number | null; term: number | null }): string
   return `Term ${scope.term}, ${scope.year}`
 }
 
+function PendingReviewCard({
+  href,
+  label,
+  caption,
+  icon: Icon,
+  accent,
+  count,
+  isLoading,
+  isError,
+  className,
+}: {
+  href: string
+  label: string
+  caption: string
+  icon: typeof ClipboardCheck
+  accent: string
+  count: number | undefined
+  isLoading: boolean
+  isError: boolean
+  className?: string
+}) {
+  return (
+    <Link href={href} className={`block h-full ${className ?? ""}`}>
+      <Card className={`h-full border-l-4 py-4 transition-colors hover:bg-accent ${accent}`}>
+        <CardContent className="flex items-start justify-between gap-2 px-4">
+          <div className="space-y-1">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+            <p className="text-3xl font-bold text-foreground">
+              {isLoading ? "…" : isError ? "—" : count}
+            </p>
+            <p className="text-xs text-muted-foreground">{isError ? "Failed to load" : caption}</p>
+          </div>
+          <Icon className={`h-5 w-5 shrink-0 ${accent.split(" ")[1]}`} />
+        </CardContent>
+      </Card>
+    </Link>
+  )
+}
+
 export default function TeacherDashboardPage() {
+  // AD-2: certificates are Principal-only on this dashboard — this card
+  // surfaces only pending Activities. Self-added certificate review still
+  // lives on /teacher/pending-requests (Certificates tab).
+  const pendingActivities = useQuery({
+    queryKey: ["pending-activities"],
+    queryFn: fetchPendingActivities,
+    retry: false,
+  })
+
   const {
     data: dashboard,
     isLoading,
@@ -180,9 +230,9 @@ export default function TeacherDashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((stat) => (
-          <Card key={stat.label} className={`border-l-4 py-4 ${stat.accent}`}>
+          <Card key={stat.label} className={`h-full border-l-4 py-4 ${stat.accent}`}>
             <CardContent className="flex items-start justify-between gap-2 px-4">
               <div className="space-y-1">
                 <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{stat.label}</p>
@@ -193,6 +243,17 @@ export default function TeacherDashboardPage() {
             </CardContent>
           </Card>
         ))}
+        <PendingReviewCard
+          href="/teacher/pending-requests"
+          label="Pending Approvals"
+          caption="Activities awaiting review"
+          icon={ClipboardCheck}
+          accent="border-l-orange-500 text-orange-500"
+          count={pendingActivities.data ? pendingActivities.data.length : undefined}
+          isLoading={pendingActivities.isLoading}
+          isError={pendingActivities.isError}
+          className="sm:col-span-2 lg:col-span-1"
+        />
       </div>
 
       <Card>

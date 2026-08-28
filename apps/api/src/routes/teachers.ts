@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/authMiddleware.js';
 import { getPendingActivities } from '../modules/activities/activities.controller.js';
+import { getPendingStudentCertificates } from '../modules/studentCertificates/studentCertificates.controller.js';
 import {
   listPendingProfileRequests,
   reviewProfileRequest,
@@ -154,6 +155,8 @@ router.get('/me/subject-assignments', requireRole(['TEACHER']), async (req: Auth
 });
 
 router.get('/me/pending-activities', requireRole(['TEACHER']), getPendingActivities);
+
+router.get('/me/pending-student-certificates', requireRole(['TEACHER']), getPendingStudentCertificates);
 
 router.get('/me/profile-requests', requireRole(['TEACHER']), listPendingProfileRequests);
 

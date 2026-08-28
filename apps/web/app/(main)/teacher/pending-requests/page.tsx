@@ -7,9 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, FileCheck, Check, X, MessageSquareWarning, UserCog } from "lucide-react"
+import { AlertCircle, FileCheck, Check, X, MessageSquareWarning, UserCog, Loader2, Paperclip, Award } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
-import { formatDateRange, type Activity } from "@/lib/activities"
+import { formatDateRange, fetchPendingActivities, type Activity } from "@/lib/activities"
+import { toDateInputValue, fetchPendingStudentCertificates, type StudentCertificate } from "@/lib/studentCertificates"
 import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -20,14 +21,6 @@ import { toast } from "sonner"
 // ---------------------------------------------------------------------------
 // Activities tab — moved verbatim from the old pending-activities/page.tsx.
 // ---------------------------------------------------------------------------
-
-async function fetchPendingActivities(): Promise<Activity[]> {
-  const response = await apiFetch("/api/teachers/me/pending-activities")
-  if (!response.ok) {
-    throw new Error("Failed to load pending activities")
-  }
-  return response.json()
-}
 
 function ReviewActionDialog({ activity, open, onOpenChange, actionType, onSuccess }: {
   activity: Activity | null,
@@ -241,6 +234,285 @@ function ActivitiesTab() {
 
       <ReviewActionDialog
         activity={selectedActivity}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        actionType={actionType}
+        onSuccess={() => setDialogOpen(false)}
+      />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Certificates tab — self-added student certificates (course/competition
+// certificates), carried over from the old pending-activities/page.tsx's
+// unified list and split into its own tab so it keeps the Activities tab's
+// contract (and this page's existing test coverage) unchanged.
+// ---------------------------------------------------------------------------
+
+async function downloadCertificateFile(certificate: StudentCertificate) {
+  let res: Response
+  try {
+    res = await apiFetch(`/api/student-certificates/${certificate.id}/file`)
+  } catch {
+    toast.error("Failed to download file")
+    return
+  }
+  if (!res.ok) {
+    toast.error("Failed to download file")
+    return
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = certificate.title
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function ReviewCertificateDialog({ certificate, open, onOpenChange, actionType, onSuccess }: {
+  certificate: StudentCertificate | null,
+  open: boolean,
+  onOpenChange: (open: boolean) => void,
+  actionType: "APPROVE" | "REJECT" | "NEEDS_CORRECTION",
+  onSuccess: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [note, setNote] = useState("")
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!certificate) return
+
+      const payload = {
+        status: actionType === "APPROVE" ? "APPROVED" : actionType,
+        teacherNote: note || undefined
+      }
+
+      const response = await apiFetch(`/api/student-certificates/${certificate.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to ${actionType.toLowerCase()} certificate`)
+      }
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pending-student-certificates"] })
+      toast.success(`Certificate ${actionType.toLowerCase()}d successfully`)
+      onSuccess()
+      setNote("")
+    },
+    onError: (error) => {
+      toast.error(error.message || `Failed to ${actionType.toLowerCase()} certificate`)
+    },
+  })
+
+  if (!certificate) return null
+
+  const titles = {
+    APPROVE: "Approve Certificate",
+    REJECT: "Reject Certificate",
+    NEEDS_CORRECTION: "Request Correction",
+  }
+
+  const descriptions = {
+    APPROVE: `Are you sure you want to approve this certificate for ${certificate.studentName}?`,
+    REJECT: `Are you sure you want to reject this certificate? It will not be shown on the student's profile.`,
+    NEEDS_CORRECTION: `What needs to be corrected by the student?`,
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{titles[actionType]}</DialogTitle>
+          <DialogDescription>{descriptions[actionType]}</DialogDescription>
+        </DialogHeader>
+
+        {actionType !== "APPROVE" && (
+          <div className="grid gap-2 py-4">
+            <Label htmlFor="certNote">Teacher Note</Label>
+            <Textarea
+              id="certNote"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Explain the reason..."
+              required={actionType === "NEEDS_CORRECTION"}
+            />
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant={actionType === "APPROVE" ? "default" : "destructive"}
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || (actionType === "NEEDS_CORRECTION" && !note.trim())}
+          >
+            {mutation.isPending ? "Saving..." : titles[actionType].split(" ")[0]}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CertificatesTab() {
+  const [selectedCertificate, setSelectedCertificate] = useState<StudentCertificate | null>(null)
+  const [actionType, setActionType] = useState<"APPROVE" | "REJECT" | "NEEDS_CORRECTION">("APPROVE")
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+
+  const {
+    data: certificates,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["pending-student-certificates"],
+    queryFn: fetchPendingStudentCertificates,
+    retry: false,
+  })
+
+  const openDialog = (certificate: StudentCertificate, action: "APPROVE" | "REJECT" | "NEEDS_CORRECTION") => {
+    setSelectedCertificate(certificate)
+    setActionType(action)
+    setDialogOpen(true)
+  }
+
+  async function handleDownload(certificate: StudentCertificate) {
+    if (downloadingId) return
+    setDownloadingId(certificate.id)
+    try {
+      await downloadCertificateFile(certificate)
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  const pageCount = Math.max(1, Math.ceil((certificates?.length ?? 0) / TABLE_PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pagedCertificates = (certificates ?? []).slice(
+    (currentPage - 1) * TABLE_PAGE_SIZE,
+    currentPage * TABLE_PAGE_SIZE
+  )
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Needs Review</CardTitle>
+          <CardDescription>Self-added certificates submitted by students in your classes</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {error instanceof Error ? error.message : "Failed to load pending certificates."}
+              </AlertDescription>
+            </Alert>
+          ) : !certificates || certificates.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <FileCheck className="mb-4 h-12 w-12 text-muted-foreground" />
+              <p className="text-lg font-medium">All caught up!</p>
+              <p className="text-sm text-muted-foreground">
+                There are no pending certificates to review at this time.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Certificate</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Evidence</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pagedCertificates.map((certificate) => (
+                    <TableRow key={certificate.id}>
+                      <TableCell className="font-medium">
+                        {certificate.studentName}
+                        <div className="text-xs text-muted-foreground">{certificate.admissionNumber}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{certificate.title}</div>
+                        {certificate.description && <div className="text-sm text-muted-foreground line-clamp-1">{certificate.description}</div>}
+                      </TableCell>
+                      <TableCell>{certificate.category ?? certificate.issuingOrganization}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {toDateInputValue(certificate.issueDate)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          {certificate.evidenceUrl && (
+                            <a href={certificate.evidenceUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                              Link
+                            </a>
+                          )}
+                          {certificate.fileUrl && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-auto p-0 text-primary hover:underline"
+                              disabled={downloadingId === certificate.id}
+                              onClick={() => handleDownload(certificate)}
+                            >
+                              {downloadingId === certificate.id ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : (
+                                <Paperclip className="mr-1 h-3 w-3" />
+                              )}
+                              File
+                            </Button>
+                          )}
+                          {!certificate.evidenceUrl && !certificate.fileUrl && "—"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button size="icon" variant="outline" className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => openDialog(certificate, "APPROVE")} title="Approve">
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="outline" className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={() => openDialog(certificate, "NEEDS_CORRECTION")} title="Request Correction">
+                            <MessageSquareWarning className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="outline" className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => openDialog(certificate, "REJECT")} title="Reject">
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <ReviewCertificateDialog
+        certificate={selectedCertificate}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         actionType={actionType}
@@ -507,6 +779,11 @@ export default function PendingRequestsPage() {
     queryFn: fetchPendingActivities,
     retry: false,
   })
+  const { data: certificates } = useQuery({
+    queryKey: ["pending-student-certificates"],
+    queryFn: fetchPendingStudentCertificates,
+    retry: false,
+  })
   const { data: profileRequests } = useQuery({
     queryKey: ["pending-profile-requests"],
     queryFn: fetchPendingProfileRequests,
@@ -523,6 +800,10 @@ export default function PendingRequestsPage() {
             <FileCheck className="h-4 w-4" />
             Activities{activities ? ` (${activities.length})` : ""}
           </TabsTrigger>
+          <TabsTrigger value="certificates" className="gap-2">
+            <Award className="h-4 w-4" />
+            Certificates{certificates ? ` (${certificates.length})` : ""}
+          </TabsTrigger>
           <TabsTrigger value="profile-updates" className="gap-2">
             <UserCog className="h-4 w-4" />
             Profile Updates{profileRequests ? ` (${profileRequests.length})` : ""}
@@ -530,6 +811,9 @@ export default function PendingRequestsPage() {
         </TabsList>
         <TabsContent value="activities" className="space-y-6">
           <ActivitiesTab />
+        </TabsContent>
+        <TabsContent value="certificates" className="space-y-6">
+          <CertificatesTab />
         </TabsContent>
         <TabsContent value="profile-updates" className="space-y-6">
           <ProfileUpdatesTab />

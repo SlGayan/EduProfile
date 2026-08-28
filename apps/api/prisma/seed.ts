@@ -99,13 +99,21 @@ async function main() {
 
   // 2. Teacher Profiles
   const teachers = ['teacher@edu.com', 'teacher1@edu.com', 'teacher2@edu.com', 'teacher3@edu.com', 'teacher4@edu.com'];
+  const teacherDetails: Record<string, { fullName: string; phone: string }> = {
+    'teacher@edu.com': { fullName: 'Mrs. S. Silva', phone: '+94 71 234 5678' },
+    'teacher1@edu.com': { fullName: 'Mr. R. Fernando', phone: '+94 71 234 5679' },
+    'teacher2@edu.com': { fullName: 'Ms. K. Jayawardena', phone: '+94 71 234 5680' },
+    'teacher3@edu.com': { fullName: 'Mr. D. Bandara', phone: '+94 71 234 5681' },
+    'teacher4@edu.com': { fullName: 'Mrs. N. Herath', phone: '+94 71 234 5682' },
+  };
   const teacherProfiles = new Map<string, any>();
   for (const email of teachers) {
     const u = userMap.get(email)!;
+    const details = teacherDetails[email]!;
     const profile = await prisma.teacher.upsert({
       where: { userId: u.id },
-      update: {},
-      create: { userId: u.id },
+      update: { displayName: details.fullName, phoneNumber: details.phone },
+      create: { userId: u.id, displayName: details.fullName, phoneNumber: details.phone },
     });
     teacherProfiles.set(email, profile);
   }
@@ -196,6 +204,21 @@ async function main() {
     create: { studentId: mainStudentProfile.id, classId: mainClass.id, enrolledAt: mainEnrolledAt, status: 'ACTIVE' },
   });
   studentUsers.push(mainStudentProfile);
+
+  await prisma.guardian.upsert({
+    where: { studentId: mainStudentProfile.id },
+    update: {
+      guardianName: 'Mr. Nimal Perera',
+      primaryPhone: '+94 77 123 4567',
+      emergencyContactPhone: '+94 71 987 6543',
+    },
+    create: {
+      studentId: mainStudentProfile.id,
+      guardianName: 'Mr. Nimal Perera',
+      primaryPhone: '+94 77 123 4567',
+      emergencyContactPhone: '+94 71 987 6543',
+    },
+  });
 
   const allClasses = Array.from(classMap.values());
   let studentCount = 1;
