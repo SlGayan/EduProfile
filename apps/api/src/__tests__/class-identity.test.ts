@@ -62,6 +62,10 @@ describe('Structured class identity (Story 13.1)', () => {
   });
 
   afterAll(async () => {
+    // Story 13.2: Enrollment rows have ON DELETE RESTRICT FKs (AD-3), so they
+    // must be removed before classes or students can be deleted in tests.
+    await prisma.enrollment.deleteMany({ where: { student: { userId: studentUserId } } });
+    await prisma.enrollment.deleteMany({ where: { class: { year: YEAR } } });
     await prisma.student.deleteMany({ where: { userId: studentUserId } });
     await prisma.user.deleteMany({ where: { id: studentUserId } });
     await prisma.class.deleteMany({ where: { year: YEAR } });
@@ -201,6 +205,60 @@ describe('Structured class identity (Story 13.1)', () => {
       await request(app)
         .delete(`/api/classes/${first.body.class.id}/students/${studentId}`)
         .set('Authorization', `Bearer ${adminToken}`);
+    });
+  });
+
+  /**
+   * Story 13.2 — enrollment lifecycle.
+   *
+   * Verifies that the Enrollment model is kept in sync with the implicit
+   * _ClassToStudent relation on both the enrol and unenrol paths.
+   */
+  describe('Story 13.2 — Enrollment lifecycle (enrol / unenrol)', () => {
+    let lifecycleClassId: number;
+
+    beforeAll(async () => {
+      const res = await createClass({ gradeLevel: GRADE, section: 'LifecycleEnrol', year: YEAR });
+      expect(res.status).toBe(201);
+      lifecycleClassId = res.body.class.id as number;
+      createdClassIds.push(lifecycleClassId);
+    });
+
+    it('creates an ACTIVE Enrollment row when a student is enrolled', async () => {
+      const res = await request(app)
+        .post(`/api/classes/${lifecycleClassId}/students`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ studentId });
+      expect(res.status).toBe(200);
+
+      const enrollment = await prisma.enrollment.findFirst({
+        where: { studentId, classId: lifecycleClassId },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(enrollment).not.toBeNull();
+      expect(enrollment!.status).toBe('ACTIVE');
+      expect(enrollment!.leftAt).toBeNull();
+      // enrolledAt must be Jan 1 of YEAR at midnight UTC (Date.UTC construction in route, AD-10)
+      const expectedEnrolledAt = new Date(Date.UTC(YEAR, 0, 1));
+      expect(enrollment!.enrolledAt.toISOString()).toBe(expectedEnrolledAt.toISOString());
+    });
+
+    it('closes the Enrollment row (leftAt + status=LEFT) when a student is unenrolled', async () => {
+      const res = await request(app)
+        .delete(`/api/classes/${lifecycleClassId}/students/${studentId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+
+      const enrollment = await prisma.enrollment.findFirst({
+        where: { studentId, classId: lifecycleClassId },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(enrollment).not.toBeNull();
+      expect(enrollment!.status).toBe('LEFT');
+      expect(enrollment!.leftAt).not.toBeNull();
+      // Row must NOT be deleted — AD-3
+      const count = await prisma.enrollment.count({ where: { studentId, classId: lifecycleClassId } });
+      expect(count).toBeGreaterThanOrEqual(1);
     });
   });
 });

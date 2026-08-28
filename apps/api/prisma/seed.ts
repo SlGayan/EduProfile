@@ -187,6 +187,14 @@ async function main() {
       classes: { connect: [{ id: mainClass.id }] },
     },
   });
+  // Story 13.2 — keep Enrollment in sync with the implicit relation (AD-1 Phase 1).
+  // enrolledAt = Jan 1 of class year, UTC (AD-10). Upsert is idempotent.
+  const mainEnrolledAt = new Date(Date.UTC(mainClass.year, 0, 1));
+  await prisma.enrollment.upsert({
+    where: { studentId_classId_enrolledAt: { studentId: mainStudentProfile.id, classId: mainClass.id, enrolledAt: mainEnrolledAt } },
+    update: {},
+    create: { studentId: mainStudentProfile.id, classId: mainClass.id, enrolledAt: mainEnrolledAt, status: 'ACTIVE' },
+  });
   studentUsers.push(mainStudentProfile);
 
   const allClasses = Array.from(classMap.values());
@@ -235,6 +243,13 @@ async function main() {
         alYear: 2026 + (i % 3),
         classes: { connect: [{ id: assignedClass.id }] },
       },
+    });
+    // Story 13.2 — keep Enrollment in sync with the implicit relation (AD-1 Phase 1).
+    const genEnrolledAt = new Date(Date.UTC(assignedClass.year, 0, 1));
+    await prisma.enrollment.upsert({
+      where: { studentId_classId_enrolledAt: { studentId: profile.id, classId: assignedClass.id, enrolledAt: genEnrolledAt } },
+      update: {},
+      create: { studentId: profile.id, classId: assignedClass.id, enrolledAt: genEnrolledAt, status: 'ACTIVE' },
     });
     studentUsers.push(profile);
     studentCount++;

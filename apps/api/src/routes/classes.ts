@@ -244,14 +244,27 @@ router.post('/:id/students', async (req: AuthRequest, res) => {
             });
         }
 
-        const updatedClass = await prisma.class.update({
-            where: { id },
-            data: {
-                students: {
-                    connect: { id: studentId }
-                }
-            },
-            include: { students: true }
+        // Story 13.2 (AD-1 Phase 1): keep Enrollment in sync with the implicit
+        // relation. enrolledAt = Jan 1 of class year (AD-10). Both writes run
+        // in a transaction so the two representations never diverge.
+        // Date.UTC is used so the stored value is midnight UTC, matching the
+        // make_date output in the backfill migration (PostgreSQL TIMESTAMP
+        // without timezone, treated as UTC by Prisma).
+        const enrolledAt = new Date(Date.UTC(existing.year, 0, 1)); // Jan 1 UTC
+        const updatedClass = await prisma.$transaction(async (tx) => {
+            const cls = await tx.class.update({
+                where: { id },
+                data: {
+                    students: {
+                        connect: { id: studentId }
+                    }
+                },
+                include: { students: true }
+            });
+            await tx.enrollment.create({
+                data: { studentId, classId: id, enrolledAt, status: 'ACTIVE' }
+            });
+            return cls;
         });
 
         return res.status(200).json({ class: withClassName(updatedClass) });
@@ -270,14 +283,30 @@ router.delete('/:id/students/:studentId', async (req: AuthRequest, res) => {
         const existing = await prisma.class.findUnique({ where: { id } });
         if (!existing) return res.status(404).json({ error: 'Class not found' });
 
-        const updatedClass = await prisma.class.update({
-            where: { id },
-            data: {
-                students: {
-                    disconnect: { id: studentId }
-                }
-            },
-            include: { students: true }
+        // Story 13.2 (AD-1 Phase 1 / AD-3): close the open Enrollment row rather
+        // than deleting it. Both writes run in a transaction so the implicit
+        // relation and Enrollment stay consistent. A missing Enrollment row is
+        // a warning, not an error — the implicit disconnect still proceeds.
+        const updatedClass = await prisma.$transaction(async (tx) => {
+            const closed = await tx.enrollment.updateMany({
+                where: { studentId, classId: id, leftAt: null },
+                data: { leftAt: new Date(), status: 'LEFT' },
+            });
+            if (closed.count === 0) {
+                console.warn(
+                    `[classes] unenrol: no open Enrollment found for student ${studentId} in class ${id} — ` +
+                    'implicit relation will still be disconnected'
+                );
+            }
+            return tx.class.update({
+                where: { id },
+                data: {
+                    students: {
+                        disconnect: { id: studentId }
+                    }
+                },
+                include: { students: true }
+            });
         });
 
         return res.status(200).json({ class: withClassName(updatedClass) });
