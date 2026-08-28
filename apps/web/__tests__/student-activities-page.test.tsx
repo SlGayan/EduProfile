@@ -158,7 +158,7 @@ describe("StudentActivitiesPage — populated list", () => {
     await screen.findByText("Debate Club")
     expect(screen.getByRole("button", { name: /submit activity/i })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /add certificate/i })).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /correct/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^correct$/i })).not.toBeInTheDocument()
   })
 
   it("renders a correct button and the teacher's note when an activity needs correction", async () => {
@@ -169,7 +169,7 @@ describe("StudentActivitiesPage — populated list", () => {
 
     await screen.findByText("Debate Club")
     expect(screen.getByText(/Note: Please provide evidence/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /correct/i })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^correct$/i })).toBeInTheDocument()
   })
 
   it("renders a correct button when a certificate needs correction", async () => {
@@ -180,7 +180,7 @@ describe("StudentActivitiesPage — populated list", () => {
 
     await screen.findByText("Intro to Python")
     expect(screen.getByText(/Note: Add the certificate file/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /correct/i })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^correct$/i })).toBeInTheDocument()
   })
 
   it("shows the reviewer name and date once an item has been reviewed", async () => {
