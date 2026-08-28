@@ -80,12 +80,13 @@ describe('Teacher dashboard endpoint (GET /api/teachers/me/dashboard)', () => {
       create: { userId: zeroStudentUserId },
     });
     zeroStudentTeacherId = zeroStudentTeacher.id;
-    let zeroStudentClass = await prisma.class.findFirst({
-      where: { name: 'Dashboard Test - Zero Students' },
+    const ZERO_STUDENT_CLASS = { gradeLevel: 9, section: 'DashZero', year: YEAR };
+    let zeroStudentClass = await prisma.class.findUnique({
+      where: { gradeLevel_section_year: ZERO_STUDENT_CLASS },
     });
     if (!zeroStudentClass) {
       zeroStudentClass = await prisma.class.create({
-        data: { name: 'Dashboard Test - Zero Students', year: YEAR, teacherId: zeroStudentTeacherId },
+        data: { ...ZERO_STUDENT_CLASS, teacherId: zeroStudentTeacherId },
       });
     }
     zeroStudentClassId = zeroStudentClass.id;
@@ -99,10 +100,13 @@ describe('Teacher dashboard endpoint (GET /api/teachers/me/dashboard)', () => {
       create: { userId: mainUserId },
     });
     mainTeacherId = mainTeacher.id;
-    let mainClass = await prisma.class.findFirst({ where: { name: 'Dashboard Test - Main' } });
+    const MAIN_CLASS = { gradeLevel: 9, section: 'DashMain', year: YEAR };
+    let mainClass = await prisma.class.findUnique({
+      where: { gradeLevel_section_year: MAIN_CLASS },
+    });
     if (!mainClass) {
       mainClass = await prisma.class.create({
-        data: { name: 'Dashboard Test - Main', year: YEAR, teacherId: mainTeacherId },
+        data: { ...MAIN_CLASS, teacherId: mainTeacherId },
       });
     }
     mainClassId = mainClass.id;

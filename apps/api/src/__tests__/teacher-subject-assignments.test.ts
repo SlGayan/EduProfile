@@ -139,7 +139,7 @@ describe('Teacher subject assignment endpoints', () => {
   });
 
   it('lists assignments for a class, empty array when none exist', async () => {
-    const emptyClass = await prisma.class.create({ data: { name: 'Empty Assignments Class (test)', year: 2025 } });
+    const emptyClass = await prisma.class.create({ data: { gradeLevel: 8, section: 'TsaEmpty', year: 2025 } });
 
     const emptyRes = await request(app)
       .get(`/api/classes/${emptyClass.id}/subject-assignments`)
@@ -187,7 +187,7 @@ describe('Teacher subject assignment endpoints', () => {
   });
 
   it('returns 409 when deleting a class with active subject-teaching assignments (FK constraint)', async () => {
-    const classWithAssignment = await prisma.class.create({ data: { name: 'FK Delete Test Class (test)', year: 2025 } });
+    const classWithAssignment = await prisma.class.create({ data: { gradeLevel: 8, section: 'TsaFkDelete', year: 2025 } });
     await prisma.teacherSubjectAssignment.create({
       data: { teacherId, subjectId, classId: classWithAssignment.id },
     });
@@ -204,7 +204,7 @@ describe('Teacher subject assignment endpoints', () => {
   });
 
   it('still deletes a class with zero subject-teaching assignments (200, regression check)', async () => {
-    const emptyClass = await prisma.class.create({ data: { name: 'No Assignments Delete Test Class (test)', year: 2025 } });
+    const emptyClass = await prisma.class.create({ data: { gradeLevel: 8, section: 'TsaNoAssign', year: 2025 } });
 
     const res = await request(app)
       .delete(`/api/classes/${emptyClass.id}`)
@@ -214,7 +214,7 @@ describe('Teacher subject assignment endpoints', () => {
   });
 
   it("returns the authenticated teacher's own subject assignments", async () => {
-    const assignedClass = await prisma.class.create({ data: { name: 'Me Endpoint Test Class (test)', year: 2025 } });
+    const assignedClass = await prisma.class.create({ data: { gradeLevel: 8, section: 'TsaMeEndpoint', year: 2025 } });
     await prisma.teacherSubjectAssignment.create({
       data: { teacherId, subjectId, classId: assignedClass.id },
     });

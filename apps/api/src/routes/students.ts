@@ -23,6 +23,7 @@ import {
   submitProfileRequest,
   listMyProfileRequests,
 } from '../modules/profileRequests/profileRequests.controller.js';
+import { deriveClassName } from '../lib/classIdentity.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -66,7 +67,7 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
       olYear: student.olYear,
       alYear: student.alYear,
       email: student.user.email,
-      assignedClass: student.classes[0]?.name ?? null,
+      assignedClass: student.classes[0] ? deriveClassName(student.classes[0]) : null,
     });
   } catch (err) {
     console.error('Error fetching student profile:', err);
@@ -369,7 +370,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
       } else {
         return res.status(400).json({
           error: 'You teach multiple classes — specify classId',
-          classes: teacher.classes.map((c) => ({ id: c.id, name: c.name })),
+          classes: teacher.classes.map((c) => ({ id: c.id, name: deriveClassName(c) })),
         });
       }
     } else if (classId !== undefined) {

@@ -8,6 +8,7 @@ import {
 } from '../modules/profileRequests/profileRequests.controller.js';
 import { updateTeacherSelfSchema } from '../validators/teacherValidators.js';
 import { getTeacherDashboard } from '../modules/teacher-dashboard/teacher-dashboard.controller.js';
+import { deriveClassName } from '../lib/classIdentity.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -28,7 +29,7 @@ router.get('/me', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
         address: true,
         createdAt: true,
         user: { select: { email: true, role: true } },
-        classes: { select: { id: true, name: true } },
+        classes: { select: { id: true, gradeLevel: true, section: true } },
       },
     });
 
@@ -45,7 +46,7 @@ router.get('/me', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
       email: teacher.user.email,
       role: teacher.user.role,
       joinedDate: teacher.createdAt,
-      classes: teacher.classes.map((c) => ({ id: c.id, name: c.name })),
+      classes: teacher.classes.map((c) => ({ id: c.id, name: deriveClassName(c) })),
     });
   } catch (err) {
     console.error('Error fetching teacher profile:', err);
@@ -102,7 +103,7 @@ router.get('/me/classes', requireRole(['TEACHER']), async (req: AuthRequest, res
       return res.status(403).json({ error: 'Teacher profile not found' });
     }
 
-    return res.status(200).json(teacher.classes.map((c) => ({ id: String(c.id), name: c.name })));
+    return res.status(200).json(teacher.classes.map((c) => ({ id: String(c.id), name: deriveClassName(c) })));
   } catch (err) {
     console.error('Error fetching teacher classes:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -118,10 +119,18 @@ router.get('/me/subject-assignments', requireRole(['TEACHER']), async (req: Auth
           select: {
             classId: true,
             subjectId: true,
-            class: { select: { name: true } },
+            class: { select: { gradeLevel: true, section: true } },
             subject: { select: { name: true } },
           },
-          orderBy: [{ class: { name: 'asc' } }, { subject: { name: 'asc' } }],
+          // Story 13.1 — `Class.name` is no longer a column, so this DB-level
+          // sort orders by the structural identity instead. Grade then section
+          // reproduces the old alphabetical-by-name order for the
+          // `Grade {n}-{section}` names it used to sort.
+          orderBy: [
+            { class: { gradeLevel: 'asc' } },
+            { class: { section: 'asc' } },
+            { subject: { name: 'asc' } },
+          ],
         },
       },
     });
@@ -133,7 +142,7 @@ router.get('/me/subject-assignments', requireRole(['TEACHER']), async (req: Auth
     return res.status(200).json(
       teacher.subjectAssignments.map((a) => ({
         classId: String(a.classId),
-        className: a.class.name,
+        className: deriveClassName(a.class),
         subjectId: String(a.subjectId),
         subjectName: a.subject.name,
       }))
