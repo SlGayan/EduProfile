@@ -565,7 +565,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
     }
-    const { email, fullName, indexNumber, dateOfBirth, address, nicNumber, olYear, alYear, classId } =
+    const { email, fullName, indexNumber, dateOfBirth, address, nicNumber, gender, olYear, alYear, classId } =
       parsed.data;
 
     // The JWT's role is lowercase and frontend-normalized (see
@@ -615,6 +615,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
           dateOfBirth: new Date(dateOfBirth),
           address,
           nicNumber: nicNumber ?? null,
+          gender: gender ?? null,
           olYear: olYear ?? null,
           alYear: alYear ?? null,
           ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),
@@ -640,6 +641,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
           dateOfBirth: new Date(dateOfBirth),
           address,
           nicNumber: nicNumber ?? null,
+          gender: gender ?? null,
           olYear: olYear ?? null,
           alYear: alYear ?? null,
           ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),

@@ -156,6 +156,7 @@ export const createStudentSchema = z.object({
     .trim()
     .optional()
     .transform((val) => (val === undefined || val === '' ? undefined : val)),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   olYear: z.coerce.number().int().min(1900).max(2100).optional(),
   alYear: z.coerce.number().int().min(1900).max(2100).optional(),
   classId: z.coerce.number().int().positive().optional(),

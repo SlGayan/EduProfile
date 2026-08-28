@@ -25,6 +25,8 @@ interface CreateResult {
   indexNumber: string
 }
 
+type GenderValue = "MALE" | "FEMALE" | "OTHER"
+
 interface FormFields {
   email: string
   fullName: string
@@ -32,6 +34,7 @@ interface FormFields {
   dateOfBirth: string
   address: string
   nicNumber: string
+  gender: GenderValue | ""
   olYear: string
   alYear: string
 }
@@ -43,6 +46,7 @@ const emptyFields: FormFields = {
   dateOfBirth: "",
   address: "",
   nicNumber: "",
+  gender: "",
   olYear: "",
   alYear: "",
 }
@@ -118,6 +122,7 @@ export default function AddStudentPage() {
           dateOfBirth: fields.dateOfBirth,
           address: fields.address.trim(),
           ...(fields.nicNumber.trim() && { nicNumber: fields.nicNumber.trim() }),
+          ...(fields.gender && { gender: fields.gender }),
           ...(fields.olYear.trim() && { olYear: Number(fields.olYear) }),
           ...(fields.alYear.trim() && { alYear: Number(fields.alYear) }),
           ...(classId && { classId: Number(classId) }),
@@ -213,6 +218,23 @@ export default function AddStudentPage() {
                   setFields((prev) => ({ ...prev, nicNumber: val }))
                 }}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="gender">Gender (optional)</Label>
+              <Select
+                value={fields.gender}
+                onValueChange={(value) => setFields((prev) => ({ ...prev, gender: value as GenderValue }))}
+              >
+                <SelectTrigger id="gender" className="w-full">
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MALE">Male</SelectItem>
+                  <SelectItem value="FEMALE">Female</SelectItem>
+                  <SelectItem value="OTHER">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2 sm:col-span-2">

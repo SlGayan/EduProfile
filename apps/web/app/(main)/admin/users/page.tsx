@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -165,6 +166,15 @@ function UserTable({
 }
 
 export default function UserManagementPage() {
+  return (
+    // useSearchParams requires a Suspense boundary in the App Router.
+    <Suspense fallback={null}>
+      <UserManagementPageInner />
+    </Suspense>
+  )
+}
+
+function UserManagementPageInner() {
   const queryClient = useQueryClient()
 
   const [createOpen, setCreateOpen] = useState(false)
@@ -185,6 +195,21 @@ export default function UserManagementPage() {
     resolver: zodResolver(createSchema),
     defaultValues: { email: "", password: "", role: "STUDENT" },
   })
+
+  // Deep-link support for `/admin/users?create=1` — the Admin Dashboard's
+  // "Create User" quick action lands here and should open the dialog
+  // immediately, mirroring `/admin/classes?create=1`.
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      createForm.reset()
+      setCreateOpen(true)
+    }
+    // Intentionally run only once on mount: re-running on every searchParams
+    // change would reopen the dialog if the user closes it without the URL
+    // itself changing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateFormValues) => {

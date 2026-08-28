@@ -55,6 +55,7 @@ const principalNavItems = [
 ]
 
 const adminNavItems = [
+  { href: "/admin/dashboard", label: "Dashboard", icon: Home },
   { href: "/admin/users", label: "User Management", icon: Users },
   { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/admin/search-students", label: "Search Students", icon: Search },

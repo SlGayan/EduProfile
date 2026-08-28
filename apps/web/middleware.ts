@@ -42,7 +42,7 @@ export function middleware(request: NextRequest) {
 
     // 2. If logged in and trying to access /login or /register, redirect to their dashboard
     if ((pathname === "/login" || pathname === "/register") && role) {
-        if (role === "admin") return NextResponse.redirect(new URL("/admin/users", request.url))
+        if (role === "admin") return NextResponse.redirect(new URL("/admin/dashboard", request.url))
         if (role === "teacher") return NextResponse.redirect(new URL("/teacher/dashboard", request.url))
         if (role === "principal") return NextResponse.redirect(new URL("/principal/dashboard", request.url))
         if (role === "student") return NextResponse.redirect(new URL("/student/profile", request.url))
