@@ -62,6 +62,7 @@ function PendingReviewCard({
   count,
   isLoading,
   isError,
+  className,
 }: {
   href: string
   label: string
@@ -71,10 +72,11 @@ function PendingReviewCard({
   count: number | undefined
   isLoading: boolean
   isError: boolean
+  className?: string
 }) {
   return (
-    <Link href={href} className="block">
-      <Card className={`border-l-4 py-4 transition-colors hover:bg-accent ${accent}`}>
+    <Link href={href} className={`block h-full ${className ?? ""}`}>
+      <Card className={`h-full border-l-4 py-4 transition-colors hover:bg-accent ${accent}`}>
         <CardContent className="flex items-start justify-between gap-2 px-4">
           <div className="space-y-1">
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
@@ -228,9 +230,9 @@ export default function TeacherDashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((stat) => (
-          <Card key={stat.label} className={`border-l-4 py-4 ${stat.accent}`}>
+          <Card key={stat.label} className={`h-full border-l-4 py-4 ${stat.accent}`}>
             <CardContent className="flex items-start justify-between gap-2 px-4">
               <div className="space-y-1">
                 <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{stat.label}</p>
@@ -250,6 +252,7 @@ export default function TeacherDashboardPage() {
           count={pendingActivities.data ? pendingActivities.data.length : undefined}
           isLoading={pendingActivities.isLoading}
           isError={pendingActivities.isError}
+          className="sm:col-span-2 lg:col-span-1"
         />
       </div>
 
