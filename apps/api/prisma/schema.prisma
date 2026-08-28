@@ -39,6 +39,12 @@ enum StudentStatus {
   INACTIVE
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
 model Student {
   id                   Int                       @id @default(autoincrement())
   userId               Int                       @unique
@@ -56,6 +62,7 @@ model Student {
   attendancePercentage Float?
   photoUrl             String?
   phoneNumber          String?
+  gender               Gender?
   status               StudentStatus              @default(ACTIVE)
   classes              Class[]
   enrollments          Enrollment[]
