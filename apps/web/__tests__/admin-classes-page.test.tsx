@@ -15,6 +15,7 @@ beforeAll(() => {
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 const toastSuccess = vi.fn()

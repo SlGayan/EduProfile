@@ -66,6 +66,18 @@ const optionalTermQuery = z
   .transform((val) => (val === undefined ? undefined : parseInt(val, 10)))
   .refine((val) => val === undefined || (val >= 1 && val <= 3), 'term must be between 1 and 3');
 
+/** Mirrors `gradeLevelSchema` in classValidators.ts — grades run 1..13 school-wide. */
+const optionalGradeLevelQuery = z
+  .string()
+  .optional()
+  .transform((val) => (val === undefined || val === '' ? undefined : val))
+  .refine((val) => val === undefined || /^\d{1,2}$/.test(val), 'gradeLevel must be a whole number')
+  .transform((val) => (val === undefined ? undefined : parseInt(val, 10)))
+  .refine(
+    (val) => val === undefined || (val >= 1 && val <= 13),
+    'gradeLevel must be between 1 and 13'
+  );
+
 /**
  * `.strict()` so an unrecognised filter is a 400 rather than being silently
  * ignored — a caller asking for `?grade=10` must not receive unfiltered
@@ -101,3 +113,27 @@ export const classAnalyticsQuerySchema = z
   .strict();
 
 export type ClassAnalyticsQuery = z.infer<typeof classAnalyticsQuerySchema>;
+
+/**
+ * `GET /api/principals/me/dashboard` and `GET /api/principals/me/pending-marks`.
+ *
+ * All four filters are optional and independently omittable — the dashboard
+ * resolves sensible defaults (latest year, latest recorded term) when they're
+ * absent. `classId` is the most specific: when present it pins `year` and
+ * `gradeLevel` to that class's own values (see the controller), so a caller
+ * sending a mismatched combination doesn't silently see the wrong scope.
+ */
+export const principalDashboardQuerySchema = z
+  .object({
+    classId: optionalNumericQuery('classId'),
+    year: optionalYearQuery,
+    term: optionalTermQuery,
+    gradeLevel: optionalGradeLevelQuery,
+    // Narrows the "School Performance by Grade" chart to one subject only —
+    // `getPendingMarksClasses` accepts and ignores this key, since it has no
+    // chart to narrow.
+    subjectId: optionalNumericQuery('subjectId'),
+  })
+  .strict();
+
+export type PrincipalDashboardQuery = z.infer<typeof principalDashboardQuerySchema>;

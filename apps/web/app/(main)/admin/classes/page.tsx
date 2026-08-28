@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -687,6 +687,15 @@ function SubjectAssignmentsModal({
 // ---------------------------------------------------------------------------
 
 export default function ClassManagementPage() {
+  return (
+    // useSearchParams requires a Suspense boundary in the App Router.
+    <Suspense fallback={null}>
+      <ClassManagementPageInner />
+    </Suspense>
+  )
+}
+
+function ClassManagementPageInner() {
   const router = useRouter()
   const queryClient = useQueryClient()
 
@@ -757,6 +766,22 @@ export default function ClassManagementPage() {
     },
     onError: (err: Error) => toast.error(err.message),
   })
+
+  // Deep-link support for `/admin/classes?create=1` — the Principal
+  // Dashboard's "Create Class" quick action lands here and should open the
+  // dialog immediately rather than making the principal find the button.
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      createForm.reset()
+      setCreateTeacherId("none")
+      setCreateOpen(true)
+    }
+    // Intentionally run only once on mount: re-running on every searchParams
+    // change would reopen the dialog if the user closes it without the URL
+    // itself changing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Edit form
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -51,6 +51,7 @@ const principalNavItems = [
   { href: "/principal/certificates", label: "Certificates", icon: FileText },
   { href: "/admin/certificate-templates", label: "Certificate Templates", icon: LayoutTemplate },
   { href: "/principal/analytics", label: "Analytics", icon: TrendingUp },
+  { href: "/principal/pending-marks", label: "Pending Marks", icon: ClipboardList },
 ]
 
 const adminNavItems = [
