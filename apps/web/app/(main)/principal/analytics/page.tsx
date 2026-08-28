@@ -157,8 +157,7 @@ export default function PrincipalAnalyticsPage() {
         <CardHeader>
           <CardTitle>Scope</CardTitle>
           <CardDescription>
-            Narrow to one class or one year. Grade-level filtering is not available — classes carry
-            no grade field.
+            Narrow to one class or one year. Grade-level filtering is not available yet.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row sm:items-end gap-4">

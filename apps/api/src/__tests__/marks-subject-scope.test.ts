@@ -67,10 +67,13 @@ describe('Subject-scoped mark authorization (Story 12.3)', () => {
     outsiderUserId = outsider.userId;
     outsiderTeacherId = outsider.teacherId;
 
-    let klass = await prisma.class.findFirst({ where: { name: 'Mark Scope Test Class' } });
+    const CLASS_IDENTITY = { gradeLevel: 10, section: 'MarkScope', year: YEAR };
+    let klass = await prisma.class.findUnique({
+      where: { gradeLevel_section_year: CLASS_IDENTITY },
+    });
     if (!klass) {
       klass = await prisma.class.create({
-        data: { name: 'Mark Scope Test Class', year: YEAR, teacherId: ownerTeacherId },
+        data: { ...CLASS_IDENTITY, teacherId: ownerTeacherId },
       });
     } else {
       klass = await prisma.class.update({ where: { id: klass.id }, data: { teacherId: ownerTeacherId } });

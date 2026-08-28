@@ -54,7 +54,11 @@ function renderPage() {
 
 const CLASS = {
   id: 1,
-  name: "10A",
+  // `name` is derived by the API from gradeLevel/section (Story 13.1) — the
+  // page only ever reads it, so the fixture supplies both.
+  name: "Grade 10-A",
+  gradeLevel: 10,
+  section: "A",
   year: 2025,
   teacherId: null,
   teacher: null,
@@ -155,12 +159,12 @@ async function openAssignmentsModal() {
   const user = userEvent.setup()
   renderPage()
 
-  expect(await screen.findByText("10A")).toBeInTheDocument()
+  expect(await screen.findByText("Grade 10-A")).toBeInTheDocument()
 
   await user.click(screen.getByRole("button", { name: /open menu/i }))
   await user.click(await screen.findByRole("menuitem", { name: /subject teachers/i }))
 
-  expect(await screen.findByText("Subject Teachers — 10A")).toBeInTheDocument()
+  expect(await screen.findByText("Subject Teachers — Grade 10-A")).toBeInTheDocument()
   return user
 }
 

@@ -72,10 +72,16 @@ model Teacher {
   updatedAt                   DateTime                   @updatedAt
 }
 
+// Story 13.1 — structured class identity. A class is identified by the triple
+// (gradeLevel, section, year), never by free text. The human-readable `name`
+// is NOT stored: per Epic 13 AD-9 it is derived at read time by
+// `src/lib/classIdentity.ts#deriveClassName` and still appears in every API
+// response, so read-only consumers are unaffected.
 model Class {
   id                 Int                        @id @default(autoincrement())
-  name               String
-  year               Int?
+  gradeLevel         Int
+  section            String
+  year               Int
   teacherId          Int?
   teacher            Teacher?                   @relation(fields: [teacherId], references: [id])
   students           Student[]
@@ -83,6 +89,8 @@ model Class {
   subjectAssignments TeacherSubjectAssignment[]
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
+
+  @@unique([gradeLevel, section, year])
 }
 
 model Subject {
