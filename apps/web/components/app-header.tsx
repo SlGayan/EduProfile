@@ -52,7 +52,7 @@ export function AppHeader() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-10 pr-2 pl-1 rounded-full flex items-center gap-2">
               <Avatar>
-                <AvatarImage src="/placeholder-user.jpg" alt="User" />
+                <AvatarImage src="/placeholder-user.jpg" alt="User" width={32} height={32} />
                 <AvatarFallback>
                   {user?.name
                     ?.split(" ")
@@ -74,7 +74,7 @@ export function AppHeader() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => {
               if (user?.role === "admin") router.push("/admin/users")
-              else if (user?.role === "teacher") router.push("/teacher/dashboard")
+              else if (user?.role === "teacher") router.push("/teacher/profile")
               else if (user?.role === "principal") router.push("/principal/dashboard")
               else if (user?.role === "student") router.push("/student/profile")
             }}>

@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, ArrowUpDown } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
+import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 
 interface ClassMark {
   id: string
@@ -46,6 +47,7 @@ export default function TeacherClassMarksPage() {
   const [selectedSubject, setSelectedSubject] = useState<string>("")
   const [sortField, setSortField] = useState<SortField>("studentName")
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
+  const [page, setPage] = useState(1)
 
   const {
     data: marks,
@@ -89,6 +91,13 @@ export default function TeacherClassMarksPage() {
     return 0
   })
 
+  const pageCount = Math.max(1, Math.ceil(sortedMarks.length / TABLE_PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pagedMarks = sortedMarks.slice(
+    (currentPage - 1) * TABLE_PAGE_SIZE,
+    currentPage * TABLE_PAGE_SIZE
+  )
+
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">Class Marks</h1>
@@ -104,7 +113,13 @@ export default function TeacherClassMarksPage() {
               <label htmlFor="term" className="mb-1 block text-sm font-medium">
                 Term
               </label>
-              <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+              <Select
+                value={selectedTerm}
+                onValueChange={(value) => {
+                  setSelectedTerm(value)
+                  setPage(1)
+                }}
+              >
                 <SelectTrigger id="term" className="w-full">
                   <SelectValue placeholder="All Terms" />
                 </SelectTrigger>
@@ -123,7 +138,13 @@ export default function TeacherClassMarksPage() {
               <label htmlFor="subject" className="mb-1 block text-sm font-medium">
                 Subject
               </label>
-              <Select value={selectedSubject} onValueChange={setSelectedSubject}>
+              <Select
+                value={selectedSubject}
+                onValueChange={(value) => {
+                  setSelectedSubject(value)
+                  setPage(1)
+                }}
+              >
                 <SelectTrigger id="subject" className="w-full">
                   <SelectValue placeholder="All Subjects" />
                 </SelectTrigger>
@@ -143,6 +164,7 @@ export default function TeacherClassMarksPage() {
               onClick={() => {
                 setSelectedTerm("")
                 setSelectedSubject("")
+                setPage(1)
               }}
               className="w-full sm:w-auto"
             >
@@ -235,7 +257,7 @@ export default function TeacherClassMarksPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedMarks.map((mark) => (
+                  {pagedMarks.map((mark) => (
                     <TableRow key={mark.id}>
                       <TableCell className="font-medium">
                         {mark.studentName}
@@ -252,6 +274,7 @@ export default function TeacherClassMarksPage() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
             </div>
           )}
         </CardContent>

@@ -6,6 +6,8 @@ import {
   schoolAnalyticsQuerySchema,
   classAnalyticsQuerySchema,
 } from '../../validators/analyticsValidators.js';
+import { READ_TX_OPTIONS, round2 } from '../../lib/queryHelpers.js';
+import { deriveClassName } from '../../lib/classIdentity.js';
 
 // Per-module client, matching every other file in apps/api/src. No shared
 // singleton exists in this codebase; introducing one is out of scope here.
@@ -23,30 +25,12 @@ const ROLE_ADMIN = 'admin';
 const ROLE_PRINCIPAL = 'principal';
 
 /**
- * Reads are wrapped in a transaction so the several queries behind one response
- * observe a single database snapshot — otherwise a concurrent `marks/import`
- * commit lands between the aggregate and the detail query and the two sections
- * of the same JSON body disagree. The timeout is raised well above Prisma's 5s
- * default because these aggregates are deliberately unbounded (see the Story
- * 10.1 review decision on scale).
- */
-const READ_TX_OPTIONS = {
-  timeout: 20_000,
-  maxWait: 5_000,
-  isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
-} as const;
-
-/** Averages are money-free ratios; two decimals is enough for every chart. */
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-/**
  * Sorting is pinned to a fixed locale. A bare `localeCompare()` follows the
  * host's ICU build and `LANG`, so identical data could order differently
  * between a developer machine and the server. Ties fall through to a numeric id
- * so the order is total: `Class.name` has no unique constraint, and two classes
- * genuinely can share a name.
+ * so the order is total: the derived class name is not itself a unique key, and
+ * this helper is also used for subject and student names, which genuinely can
+ * repeat.
  */
 function byName<T extends { id: number; name: string }>(a: T, b: T): number {
   return a.name.localeCompare(b.name, 'en') || a.id - b.id;
@@ -148,7 +132,7 @@ export const getClassAnalytics = async (req: AuthRequest, res: Response) => {
     const result = await prisma.$transaction(async (tx) => {
       const schoolClass = await tx.class.findUnique({
         where: { id: classId },
-        select: { id: true, name: true },
+        select: { id: true, gradeLevel: true, section: true },
       });
 
       if (!schoolClass) {
@@ -252,7 +236,7 @@ export const getClassAnalytics = async (req: AuthRequest, res: Response) => {
 
     return res.status(200).json({
       classId: schoolClass.id,
-      className: schoolClass.name,
+      className: deriveClassName(schoolClass),
       scope: { year: year ?? null, term: term ?? null },
       subjectAverages,
       studentProgress,
@@ -267,11 +251,10 @@ export const getClassAnalytics = async (req: AuthRequest, res: Response) => {
  * AC2 — school-wide aggregates for a Principal/Administrator, optionally
  * narrowed to one class and/or one year.
  *
- * There is no per-grade filter: `Class` carries only `name` and `year`, with no
- * grade column anywhere in the schema. Deriving a grade by parsing the class
- * name would break the moment a class is named differently, so the filter is
- * omitted rather than faked. Per the Story 10.1 review decision, per-class is
- * the supported granularity.
+ * There is no per-grade filter. Story 13.1 gave `Class` a real `gradeLevel`
+ * column, so one is now feasible — it is simply out of scope here and was
+ * deliberately left out of that story. Per the Story 10.1 review decision,
+ * per-class remains the supported granularity until a story asks otherwise.
  */
 export const getSchoolAnalytics = async (req: AuthRequest, res: Response) => {
   try {
@@ -329,7 +312,8 @@ export const getSchoolAnalytics = async (req: AuthRequest, res: Response) => {
         where: classId !== undefined ? { id: classId } : {},
         select: {
           id: true,
-          name: true,
+          gradeLevel: true,
+          section: true,
           students: { where: { user: { deletedAt: null } }, select: { id: true } },
         },
       });
@@ -378,7 +362,7 @@ export const getSchoolAnalytics = async (req: AuthRequest, res: Response) => {
         const stat = classStats.get(c.id)!;
         return {
           classId: c.id,
-          className: c.name,
+          className: deriveClassName(c),
           // null, not 0: a class with no marks has no average, and 0 would read
           // as "everyone scored zero" on a chart.
           average: stat.count > 0 ? round2(stat.total / stat.count) : null,

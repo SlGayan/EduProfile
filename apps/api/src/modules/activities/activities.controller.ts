@@ -11,7 +11,7 @@ import {
 // singleton exists in this codebase; introducing one is out of scope here.
 const prisma = new PrismaClient();
 
-type AuthzFailure = { status: number; error: string };
+export type AuthzFailure = { status: number; error: string };
 
 /**
  * The JWT carries a lowercase, frontend-normalized role (see routes/auth.ts) —
@@ -24,17 +24,17 @@ const ROLE_ADMIN = 'admin';
 // Reviewer relation is selected consistently wherever an activity is
 // returned, so this shape is the one place the include and the read agree.
 const REVIEWER_INCLUDE = {
-  reviewedBy: { select: { email: true, teacher: { select: { fullName: true } } } },
+  reviewedBy: { select: { email: true, teacher: { select: { displayName: true } } } },
 } as const;
 
 type ActivityWithReviewer = ExtracurricularActivity & {
-  reviewedBy?: { email: string; teacher: { fullName: string | null } | null } | null;
+  reviewedBy?: { email: string; teacher: { displayName: string | null } | null } | null;
 };
 
 /** A teacher's display name if they have one, else the reviewing user's email (covers admin reviewers). */
 function reviewerDisplayName(reviewedBy: ActivityWithReviewer['reviewedBy']): string | null {
   if (!reviewedBy) return null;
-  return reviewedBy.teacher?.fullName ?? reviewedBy.email;
+  return reviewedBy.teacher?.displayName ?? reviewedBy.email;
 }
 
 function serializeActivity(activity: ActivityWithReviewer) {
@@ -79,7 +79,7 @@ function parseId(raw: unknown): number | null {
  * "some" check, never a single-class lookup. Mirrors the authorization used by
  * marks.controller's importMarks/getClassMarks.
  */
-async function authorizeStudentAccess(
+export async function authorizeStudentAccess(
   req: AuthRequest,
   studentId: number
 ): Promise<AuthzFailure | null> {

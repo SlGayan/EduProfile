@@ -33,8 +33,13 @@ import { apiFetch } from "@/lib/apiFetch"
 
 interface ApiClass {
   id: number
+  // Story 13.1 — `name` is derived by the API from gradeLevel/section, not
+  // stored. Still returned on every class response, so display code is
+  // unchanged; only the write path sends the structured fields.
   name: string
-  year: number | null
+  gradeLevel: number
+  section: string
+  year: number
   teacher: { id: number; user: { email: string } } | null
   _count: { students: number }
 }
@@ -47,7 +52,8 @@ interface ApiUser {
 }
 
 interface ClassFormData {
-  name: string
+  gradeLevel: number
+  section: string
   year: number
   teacherId: string
 }
@@ -60,7 +66,8 @@ export default function ClassManagementPage() {
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState<ClassFormData>({
-    name: "",
+    gradeLevel: 1,
+    section: "",
     year: new Date().getFullYear(),
     teacherId: "none", // Changed default teacherId from empty string to "none"
   })
@@ -94,7 +101,11 @@ export default function ClassManagementPage() {
     mutationFn: async (data: ClassFormData) => {
       // createClassSchema's teacherId is `.optional()` only (no `.nullable()`) —
       // omit the key entirely rather than sending null, same as admin/classes/page.tsx.
-      const body: Record<string, unknown> = { name: data.name, year: data.year }
+      const body: Record<string, unknown> = {
+        gradeLevel: data.gradeLevel,
+        section: data.section,
+        year: data.year,
+      }
       if (data.teacherId !== "none") body.teacherId = Number(data.teacherId)
 
       const response = await apiFetch("/api/classes", {
@@ -120,7 +131,8 @@ export default function ClassManagementPage() {
       const response = await apiFetch(`/api/classes/${id}`, {
         method: "PUT",
         body: JSON.stringify({
-          name: data.name,
+          gradeLevel: data.gradeLevel,
+          section: data.section,
           year: data.year,
           teacherId: data.teacherId !== "none" ? Number(data.teacherId) : null,
         }),
@@ -158,7 +170,8 @@ export default function ClassManagementPage() {
 
   const resetForm = () => {
     setFormData({
-      name: "",
+      gradeLevel: 1,
+      section: "",
       year: new Date().getFullYear(),
       teacherId: "none", // Changed default teacherId from empty string to "none"
     })
@@ -178,11 +191,21 @@ export default function ClassManagementPage() {
     }
   }
 
+  // Same NaN guard as the year field: a cleared grade box must not serialize to
+  // `null` and trip the API's `gradeLevel` schema.
+  const handleGradeLevelChange = (value: string) => {
+    const parsed = Number.parseInt(value, 10)
+    if (!Number.isNaN(parsed)) {
+      setFormData({ ...formData, gradeLevel: parsed })
+    }
+  }
+
   const handleEdit = (classItem: ApiClass) => {
     setSelectedClass(classItem)
     setFormData({
-      name: classItem.name,
-      year: classItem.year ?? new Date().getFullYear(),
+      gradeLevel: classItem.gradeLevel,
+      section: classItem.section,
+      year: classItem.year,
       teacherId: classItem.teacher ? String(classItem.teacher.id) : "none",
     })
     setIsEditDialogOpen(true)
@@ -238,12 +261,24 @@ export default function ClassManagementPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Class Name</Label>
+                <Label htmlFor="gradeLevel">Grade Level</Label>
                 <Input
-                  id="name"
-                  placeholder="e.g., 10A, 11 Science"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  id="gradeLevel"
+                  type="number"
+                  min={1}
+                  max={13}
+                  placeholder="1-13"
+                  value={formData.gradeLevel}
+                  onChange={(e) => handleGradeLevelChange(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="section">Section</Label>
+                <Input
+                  id="section"
+                  placeholder="e.g., A, Science"
+                  value={formData.section}
+                  onChange={(e) => setFormData({ ...formData, section: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -366,7 +401,7 @@ export default function ClassManagementPage() {
                   {filteredClasses.map((classItem) => (
                     <TableRow key={classItem.id}>
                       <TableCell className="font-medium">{classItem.name}</TableCell>
-                      <TableCell>{classItem.year ?? "N/A"}</TableCell>
+                      <TableCell>{classItem.year}</TableCell>
                       <TableCell>
                         {classItem.teacher ? (
                           classItem.teacher.user.email
@@ -426,11 +461,22 @@ export default function ClassManagementPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Class Name</Label>
+              <Label htmlFor="edit-gradeLevel">Grade Level</Label>
               <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                id="edit-gradeLevel"
+                type="number"
+                min={1}
+                max={13}
+                value={formData.gradeLevel}
+                onChange={(e) => handleGradeLevelChange(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-section">Section</Label>
+              <Input
+                id="edit-section"
+                value={formData.section}
+                onChange={(e) => setFormData({ ...formData, section: e.target.value })}
               />
             </div>
             <div className="space-y-2">

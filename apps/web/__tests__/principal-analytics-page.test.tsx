@@ -266,7 +266,10 @@ describe("PrincipalAnalyticsPage — request shape", () => {
     expect(apiFetchMock).toHaveBeenCalledWith("/api/analytics/school")
   })
 
-  it("never sends a grade param — no grade column exists", async () => {
+  // Story 13.1 gave Class a real `gradeLevel`, so a grade filter is now
+  // feasible — but it was deliberately left out of scope, and the analytics
+  // query schema is still .strict(), so a grade param would be a 400.
+  it("never sends a grade param — the endpoint accepts none", async () => {
     mockApi(populated)
     renderPage()
 

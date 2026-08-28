@@ -19,17 +19,17 @@ const ROLE_ADMIN = 'admin';
 // Reviewer relation is selected consistently wherever a certificate is
 // returned, so this shape is the one place the include and the read agree.
 const REVIEWER_INCLUDE = {
-  reviewedBy: { select: { email: true, teacher: { select: { fullName: true } } } },
+  reviewedBy: { select: { email: true, teacher: { select: { displayName: true } } } },
 } as const;
 
 type CertificateWithReviewer = StudentCertificate & {
-  reviewedBy?: { email: string; teacher: { fullName: string | null } | null } | null;
+  reviewedBy?: { email: string; teacher: { displayName: string | null } | null } | null;
 };
 
 /** A teacher's display name if they have one, else the reviewing user's email (covers admin reviewers). */
 function reviewerDisplayName(reviewedBy: CertificateWithReviewer['reviewedBy']): string | null {
   if (!reviewedBy) return null;
-  return reviewedBy.teacher?.fullName ?? reviewedBy.email;
+  return reviewedBy.teacher?.displayName ?? reviewedBy.email;
 }
 
 function serializeCertificate(certificate: CertificateWithReviewer) {

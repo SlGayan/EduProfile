@@ -15,14 +15,26 @@ const SUBJECTS = [
   'Health Science'
 ];
 
+// Story 13.1 — classes are identified by (gradeLevel, section, year); the
+// display name is derived, never stored.
 const CLASSES = [
-  { name: 'Grade 10-A', year: 2025, teacherEmail: 'teacher1@edu.com' },
-  { name: 'Grade 10-B', year: 2025, teacherEmail: 'teacher2@edu.com' },
-  { name: 'Grade 11-A', year: 2025, teacherEmail: 'teacher3@edu.com' },
-  { name: 'Grade 11-B', year: 2025, teacherEmail: 'teacher4@edu.com' },
-  { name: 'Grade 12-Science', year: 2025, teacherEmail: 'teacher1@edu.com' },
-  { name: 'Grade 12-Arts', year: 2025, teacherEmail: 'teacher2@edu.com' },
+  { gradeLevel: 10, section: 'A', year: 2025, teacherEmail: 'teacher1@edu.com' },
+  { gradeLevel: 10, section: 'B', year: 2025, teacherEmail: 'teacher2@edu.com' },
+  { gradeLevel: 11, section: 'A', year: 2025, teacherEmail: 'teacher3@edu.com' },
+  { gradeLevel: 11, section: 'B', year: 2025, teacherEmail: 'teacher4@edu.com' },
+  { gradeLevel: 12, section: 'Science', year: 2025, teacherEmail: 'teacher1@edu.com' },
+  { gradeLevel: 12, section: 'Arts', year: 2025, teacherEmail: 'teacher2@edu.com' },
 ];
+
+// The main test class used to be named 'Grade 10-A (Test)', which collapses
+// onto the same identity as 'Grade 10-A' for 2025 under the new unique
+// constraint. It gets its own section so the two can coexist.
+const MAIN_TEST_CLASS = { gradeLevel: 10, section: 'A (Test)', year: 2025 };
+
+/** Map key for a class's identity triple — `classMap` can no longer key on a name. */
+function classKey(c: { gradeLevel: number; section: string; year: number }) {
+  return `${c.gradeLevel}|${c.section}|${c.year}`;
+}
 
 function randomDate(start: Date, end: Date) {
   return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
@@ -107,26 +119,29 @@ async function main() {
   }
   console.log('✓ Teacher profiles created');
 
-  // 3. Classes
+  // 3. Classes — idempotency keys on the identity triple, not on a name.
   const classMap = new Map<string, any>();
-  
-  let mainClass = await prisma.class.findFirst({ where: { name: 'Grade 10-A (Test)' }});
+
+  let mainClass = await prisma.class.findUnique({
+    where: { gradeLevel_section_year: MAIN_TEST_CLASS },
+  });
   if (!mainClass) {
     mainClass = await prisma.class.create({
-      data: { name: 'Grade 10-A (Test)', year: 2025, teacherId: teacherProfiles.get('teacher@edu.com')!.id },
+      data: { ...MAIN_TEST_CLASS, teacherId: teacherProfiles.get('teacher@edu.com')!.id },
     });
   }
-  classMap.set(mainClass.name, mainClass);
+  classMap.set(classKey(mainClass), mainClass);
 
   for (const c of CLASSES) {
-    let cls = await prisma.class.findFirst({ where: { name: c.name }});
+    const identity = { gradeLevel: c.gradeLevel, section: c.section, year: c.year };
+    let cls = await prisma.class.findUnique({ where: { gradeLevel_section_year: identity } });
     if (!cls) {
       const tProfile = teacherProfiles.get(c.teacherEmail)!;
       cls = await prisma.class.create({
-        data: { name: c.name, year: c.year, teacherId: tProfile.id },
+        data: { ...identity, teacherId: tProfile.id },
       });
     }
-    classMap.set(c.name, cls);
+    classMap.set(classKey(cls), cls);
   }
   console.log('✓ Classes created');
 
@@ -179,6 +194,14 @@ async function main() {
       alYear: 2026,
       classes: { connect: [{ id: mainClass.id }] },
     },
+  });
+  // Story 13.2 — keep Enrollment in sync with the implicit relation (AD-1 Phase 1).
+  // enrolledAt = Jan 1 of class year, UTC (AD-10). Upsert is idempotent.
+  const mainEnrolledAt = new Date(Date.UTC(mainClass.year, 0, 1));
+  await prisma.enrollment.upsert({
+    where: { studentId_classId_enrolledAt: { studentId: mainStudentProfile.id, classId: mainClass.id, enrolledAt: mainEnrolledAt } },
+    update: {},
+    create: { studentId: mainStudentProfile.id, classId: mainClass.id, enrolledAt: mainEnrolledAt, status: 'ACTIVE' },
   });
   studentUsers.push(mainStudentProfile);
 
@@ -243,6 +266,13 @@ async function main() {
         alYear: 2026 + (i % 3),
         classes: { connect: [{ id: assignedClass.id }] },
       },
+    });
+    // Story 13.2 — keep Enrollment in sync with the implicit relation (AD-1 Phase 1).
+    const genEnrolledAt = new Date(Date.UTC(assignedClass.year, 0, 1));
+    await prisma.enrollment.upsert({
+      where: { studentId_classId_enrolledAt: { studentId: profile.id, classId: assignedClass.id, enrolledAt: genEnrolledAt } },
+      update: {},
+      create: { studentId: profile.id, classId: assignedClass.id, enrolledAt: genEnrolledAt, status: 'ACTIVE' },
     });
     studentUsers.push(profile);
     studentCount++;

@@ -135,3 +135,30 @@ export const upsertGuardianSchema = z
   .strict();
 
 export type UpsertGuardianInput = z.infer<typeof upsertGuardianSchema>;
+
+/**
+ * Single-record equivalent of `studentImportRowSchema` for `POST /api/students`.
+ * Same field rules (including the `@edu.com` email domain restriction), but
+ * shaped for a JSON body — `olYear`/`alYear` arrive as numbers, not CSV
+ * strings, and `classId` lets a caller enroll the new student immediately.
+ */
+export const createStudentSchema = z.object({
+  email: z.string().trim().toLowerCase().email().endsWith('@edu.com', 'Email must end with @edu.com'),
+  fullName: z.string().trim().min(1, 'fullName is required'),
+  indexNumber: z.string().trim().min(1, 'indexNumber is required'),
+  dateOfBirth: z
+    .string()
+    .min(1, 'dateOfBirth is required')
+    .refine((val) => !isNaN(Date.parse(val)), 'dateOfBirth must be a valid date'),
+  address: z.string().trim().min(1, 'address is required'),
+  nicNumber: z
+    .string()
+    .trim()
+    .optional()
+    .transform((val) => (val === undefined || val === '' ? undefined : val)),
+  olYear: z.coerce.number().int().min(1900).max(2100).optional(),
+  alYear: z.coerce.number().int().min(1900).max(2100).optional(),
+  classId: z.coerce.number().int().positive().optional(),
+});
+
+export type CreateStudentInput = z.infer<typeof createStudentSchema>;

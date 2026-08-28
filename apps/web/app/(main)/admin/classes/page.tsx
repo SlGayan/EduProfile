@@ -63,6 +63,7 @@ import {
   School,
   UserMinus,
   UserPlus,
+  BookOpen,
 } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { getCurrentUser } from "@/lib/auth"
@@ -85,15 +86,37 @@ interface ApiStudentRecord {
 
 interface ApiClass {
   id: number
+  // Story 13.1 — `name` is derived by the API from gradeLevel/section, not
+  // stored. It is still returned on every class response, so display code
+  // keeps reading it; only the write path sends the structured fields.
   name: string
-  year: number | null
+  gradeLevel: number
+  section: string
+  year: number
   teacherId: number | null
   teacher: ApiTeacherRecord | null
+  students: { id: number }[]
   _count: { students: number }
 }
 
 interface ApiClassDetail extends ApiClass {
   students: ApiStudentRecord[]
+}
+
+// Row shape from GET /api/classes/:id/subject-assignments
+interface ApiSubjectAssignment {
+  id: number
+  teacherId: number
+  subjectId: number
+  classId: number
+  teacher: { id: number; user: { email: string } }
+  subject: { id: number; name: string }
+}
+
+// Row shape from GET /api/subjects (a raw array, not { subjects: [...] })
+interface ApiSubjectOption {
+  id: string
+  name: string
 }
 
 // User records from GET /api/users (includes nested teacher/student profile ids)
@@ -102,7 +125,7 @@ interface ApiUser {
   email: string
   role: string
   teacher: { id: number } | null
-  student: { id: number } | null
+  student: { id: number; fullName: string; indexNumber: string } | null
 }
 
 // ---------------------------------------------------------------------------
@@ -110,13 +133,18 @@ interface ApiUser {
 // ---------------------------------------------------------------------------
 
 const classSchema = z.object({
-  name: z.string().min(1, "Class name is required"),
+  gradeLevel: z
+    .number({ invalid_type_error: "Grade must be a number" })
+    .int()
+    .min(1, "Grade must be between 1 and 13")
+    .max(13, "Grade must be between 1 and 13"),
+  section: z.string().min(1, "Section is required"),
+  // Required, not optional: the API rejects a class with no academic year.
   year: z
     .number({ invalid_type_error: "Year must be a number" })
     .int()
     .min(2000, "Year must be 2000 or later")
-    .max(2100, "Year must be 2100 or earlier")
-    .optional(),
+    .max(2100, "Year must be 2100 or earlier"),
 })
 
 type ClassFormValues = z.infer<typeof classSchema>
@@ -151,6 +179,19 @@ async function fetchUsers(): Promise<ApiUser[]> {
   return data.users
 }
 
+async function fetchClassSubjectAssignments(classId: number): Promise<ApiSubjectAssignment[]> {
+  const res = await apiFetch(`/api/classes/${classId}/subject-assignments`)
+  if (!res.ok) throw new Error("Failed to fetch subject assignments")
+  const data = await res.json()
+  return data.assignments
+}
+
+async function fetchSubjects(): Promise<ApiSubjectOption[]> {
+  const res = await apiFetch("/api/subjects")
+  if (!res.ok) throw new Error("Failed to fetch subjects")
+  return res.json()
+}
+
 // ---------------------------------------------------------------------------
 // Roster modal
 // ---------------------------------------------------------------------------
@@ -181,14 +222,37 @@ function RosterModal({
     enabled: open,
   })
 
+  // Fetch all classes to detect students already enrolled elsewhere this year
+  const { data: allClasses = [] } = useQuery({
+    queryKey: ["classes"],
+    queryFn: fetchClasses,
+    enabled: open,
+  })
+
   const allStudents = allUsers.filter(
     (u) => u.role === "STUDENT" && u.student !== null,
   )
 
+  // studentId -> the other class (same year) they're already enrolled in
+  const otherEnrollments = new Map<number, ApiClass>()
+  if (classItem?.year != null) {
+    for (const c of allClasses) {
+      if (c.id === classItem.id || c.year !== classItem.year) continue
+      for (const s of c.students) {
+        if (!otherEnrollments.has(s.id)) otherEnrollments.set(s.id, c)
+      }
+    }
+  }
+
   const filteredStudents = studentSearch.trim().length >= 2
-    ? allStudents.filter((u) =>
-        u.email.toLowerCase().includes(studentSearch.toLowerCase()),
-      )
+    ? allStudents.filter((u) => {
+        const query = studentSearch.toLowerCase()
+        return (
+          u.email.toLowerCase().includes(query) ||
+          u.student!.fullName.toLowerCase().includes(query) ||
+          u.student!.indexNumber.toLowerCase().includes(query)
+        )
+      })
     : []
 
   const enrolledStudentIds = new Set(
@@ -295,7 +359,7 @@ function RosterModal({
           <div className="space-y-2 border-t pt-4">
             <h3 className="text-sm font-semibold">Add Student</h3>
             <Input
-              placeholder="Search by email (min 2 characters)…"
+              placeholder="Search by name, index number, or email (min 2 characters)…"
               value={studentSearch}
               onChange={(e) => setStudentSearch(e.target.value)}
             />
@@ -309,12 +373,22 @@ function RosterModal({
                     {filteredStudents.map((u) => {
                       const studentId = u.student!.id
                       const enrolled = enrolledStudentIds.has(studentId)
+                      const conflictClass = otherEnrollments.get(studentId)
                       return (
                         <TableRow key={u.id}>
-                          <TableCell>{u.email}</TableCell>
+                          <TableCell>
+                            <div>{u.student!.fullName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {u.student!.indexNumber} · {u.email}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
                             {enrolled ? (
                               <Badge variant="outline" className="text-xs">Enrolled</Badge>
+                            ) : conflictClass ? (
+                              <Badge variant="outline" className="text-xs">
+                                Enrolled — {conflictClass.name}
+                              </Badge>
                             ) : (
                               <Button
                                 size="sm"
@@ -375,6 +449,240 @@ function RosterModal({
 }
 
 // ---------------------------------------------------------------------------
+// Subject assignments modal
+// ---------------------------------------------------------------------------
+
+function SubjectAssignmentsModal({
+  classItem,
+  teachers,
+  open,
+  onClose,
+}: {
+  classItem: ApiClass | null
+  teachers: ApiUser[]
+  open: boolean
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>("")
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("")
+  const [warningMessage, setWarningMessage] = useState<string | null>(null)
+
+  const { data: assignments = [], isLoading: loadingAssignments, isError: assignmentsError } = useQuery({
+    queryKey: ["class-subject-assignments", classItem?.id],
+    queryFn: () => fetchClassSubjectAssignments(classItem!.id),
+    enabled: open && classItem !== null,
+  })
+
+  const { data: subjects = [], isError: subjectsError, isLoading: subjectsLoading } = useQuery({
+    queryKey: ["subjects"],
+    queryFn: fetchSubjects,
+    enabled: open,
+  })
+
+  // Reset local state when the modal closes or switches to a different class,
+  // since this component stays mounted across different classItem values.
+  useEffect(() => {
+    setSelectedTeacherId("")
+    setSelectedSubjectId("")
+    setWarningMessage(null)
+  }, [open, classItem?.id])
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch("/api/teacher-subject-assignments", {
+        method: "POST",
+        body: JSON.stringify({
+          teacherId: Number(selectedTeacherId),
+          subjectId: Number(selectedSubjectId),
+          classId: classItem!.id,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to add assignment")
+      return data as { assignment: unknown; warning?: string }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["class-subject-assignments", classItem?.id] })
+      toast.success("Teacher assigned to subject")
+      if (data.warning) {
+        setWarningMessage(data.warning)
+        toast.warning(data.warning)
+      } else {
+        setWarningMessage(null)
+      }
+      setSelectedTeacherId("")
+      setSelectedSubjectId("")
+    },
+    onError: (err: Error) => {
+      setWarningMessage(null)
+      toast.error(err.message)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(`/api/teacher-subject-assignments/${id}`, {
+        method: "DELETE",
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to remove assignment")
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["class-subject-assignments", classItem?.id] })
+      toast.success("Assignment removed")
+      setWarningMessage(null)
+    },
+    onError: (err: Error) => {
+      // 404 (already removed) still means the list is stale — refresh it too.
+      queryClient.invalidateQueries({ queryKey: ["class-subject-assignments", classItem?.id] })
+      toast.error(err.message)
+      setWarningMessage(null)
+    },
+  })
+
+  const canSubmit = selectedTeacherId !== "" && selectedSubjectId !== ""
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-full sm:max-w-2xl mx-2 my-4 p-4 sm:mx-auto sm:my-auto sm:p-6">
+        <DialogHeader>
+          <DialogTitle>Subject Teachers — {classItem?.name}</DialogTitle>
+          <DialogDescription>
+            Assign teachers to teach subjects in this class.
+          </DialogDescription>
+        </DialogHeader>
+
+        {warningMessage && (
+          <Badge
+            variant="outline"
+            className="w-fit border-amber-600 text-amber-600 dark:border-amber-400 dark:text-amber-400"
+          >
+            {warningMessage}
+          </Badge>
+        )}
+
+        {/* Current assignments */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Current Assignments</h3>
+          {loadingAssignments ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </div>
+          ) : assignmentsError ? (
+            <p className="text-sm text-destructive py-4 text-center">
+              Failed to load subject assignments.
+            </p>
+          ) : assignments.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No subject assignments yet.
+            </p>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Teacher</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead className="w-[80px]" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {assignments.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell>{a.teacher.user.email}</TableCell>
+                      <TableCell>{a.subject.name}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteMutation.mutate(a.id)}
+                        >
+                          <UserMinus className="h-4 w-4" />
+                          <span className="sr-only">
+                            Remove {a.teacher.user.email} from {a.subject.name}
+                          </span>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+
+        {/* Add assignment */}
+        <div className="space-y-2 border-t pt-4">
+          <h3 className="text-sm font-semibold">Add Teacher to Subject</h3>
+          {subjectsError && (
+            <p className="text-xs text-destructive">Failed to load subjects</p>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex-1">
+              <Label htmlFor="sa-teacher" className="sr-only">Teacher</Label>
+              <Select
+                value={selectedTeacherId}
+                onValueChange={setSelectedTeacherId}
+                disabled={createMutation.isPending}
+              >
+                <SelectTrigger id="sa-teacher">
+                  <SelectValue placeholder="Select teacher" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teachers.map((t) => (
+                    <SelectItem key={t.teacher!.id} value={String(t.teacher!.id)}>
+                      {t.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Label htmlFor="sa-subject" className="sr-only">Subject</Label>
+              <Select
+                value={selectedSubjectId}
+                onValueChange={setSelectedSubjectId}
+                disabled={subjectsError || subjectsLoading || createMutation.isPending}
+              >
+                <SelectTrigger id="sa-subject">
+                  <SelectValue placeholder="Select subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              disabled={!canSubmit || createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Add
+            </Button>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -395,6 +703,7 @@ export default function ClassManagementPage() {
   const [editClass, setEditClass] = useState<ApiClass | null>(null)
   const [deleteClass, setDeleteClass] = useState<ApiClass | null>(null)
   const [rosterClass, setRosterClass] = useState<ApiClass | null>(null)
+  const [assignmentsClass, setAssignmentsClass] = useState<ApiClass | null>(null)
 
   // Teacher select state (uncontrolled relative to RHF since shadcn Select doesn't use register)
   const [createTeacherId, setCreateTeacherId] = useState<string>("none")
@@ -419,13 +728,16 @@ export default function ClassManagementPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createForm = useForm<ClassFormValues>({
     resolver: zodResolver(classSchema as any),
-    defaultValues: { name: "", year: new Date().getFullYear() },
+    defaultValues: { gradeLevel: 1, section: "", year: new Date().getFullYear() },
   })
 
   const createMutation = useMutation({
     mutationFn: async (values: ClassFormValues) => {
-      const body: Record<string, unknown> = { name: values.name }
-      if (values.year) body.year = values.year
+      const body: Record<string, unknown> = {
+        gradeLevel: values.gradeLevel,
+        section: values.section,
+        year: values.year,
+      }
       if (createTeacherId !== "none") body.teacherId = Number(createTeacherId)
 
       const res = await apiFetch("/api/classes", {
@@ -450,20 +762,23 @@ export default function ClassManagementPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const editForm = useForm<ClassFormValues>({
     resolver: zodResolver(classSchema as any),
-    defaultValues: { name: "", year: new Date().getFullYear() },
+    defaultValues: { gradeLevel: 1, section: "", year: new Date().getFullYear() },
   })
 
   const openEdit = (cls: ApiClass) => {
     setEditClass(cls)
-    editForm.reset({ name: cls.name, year: cls.year ?? undefined })
+    editForm.reset({ gradeLevel: cls.gradeLevel, section: cls.section, year: cls.year })
     setEditTeacherId(cls.teacherId !== null ? String(cls.teacherId) : "none")
   }
 
   const editMutation = useMutation({
     mutationFn: async (values: ClassFormValues) => {
       if (!editClass) return
-      const body: Record<string, unknown> = { name: values.name }
-      if (values.year !== undefined) body.year = values.year
+      const body: Record<string, unknown> = {
+        gradeLevel: values.gradeLevel,
+        section: values.section,
+        year: values.year,
+      }
       body.teacherId = editTeacherId !== "none" ? Number(editTeacherId) : null
 
       const res = await apiFetch(`/api/classes/${editClass.id}`, {
@@ -560,7 +875,7 @@ export default function ClassManagementPage() {
               {classes.map((cls) => (
                 <TableRow key={cls.id}>
                   <TableCell className="font-medium">{cls.name}</TableCell>
-                  <TableCell>{cls.year ?? <span className="text-muted-foreground text-sm">—</span>}</TableCell>
+                  <TableCell>{cls.year}</TableCell>
                   <TableCell>
                     {cls.teacher ? (
                       cls.teacher.user.email
@@ -593,6 +908,10 @@ export default function ClassManagementPage() {
                           <Users className="mr-2 h-4 w-4" />
                           Manage Roster
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAssignmentsClass(cls)}>
+                          <BookOpen className="mr-2 h-4 w-4" />
+                          Subject Teachers
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
@@ -621,13 +940,25 @@ export default function ClassManagementPage() {
           <form onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}>
             <div className="space-y-4 py-2">
               <div>
-                <Label htmlFor="create-cls-name">Class Name</Label>
+                <Label htmlFor="create-cls-grade">Grade Level</Label>
                 <Input
-                  id="create-cls-name"
-                  placeholder="e.g. 10A, 11 Science"
-                  {...createForm.register("name")}
+                  id="create-cls-grade"
+                  type="number"
+                  min={1}
+                  max={13}
+                  placeholder="1-13"
+                  {...createForm.register("gradeLevel", { valueAsNumber: true })}
                 />
-                <FieldError message={createForm.formState.errors.name?.message} />
+                <FieldError message={createForm.formState.errors.gradeLevel?.message} />
+              </div>
+              <div>
+                <Label htmlFor="create-cls-section">Section</Label>
+                <Input
+                  id="create-cls-section"
+                  placeholder="e.g. A, Science"
+                  {...createForm.register("section")}
+                />
+                <FieldError message={createForm.formState.errors.section?.message} />
               </div>
               <div>
                 <Label htmlFor="create-cls-year">Academic Year</Label>
@@ -681,13 +1012,25 @@ export default function ClassManagementPage() {
           <form onSubmit={editForm.handleSubmit((v) => editMutation.mutate(v))}>
             <div className="space-y-4 py-2">
               <div>
-                <Label htmlFor="edit-cls-name">Class Name</Label>
+                <Label htmlFor="edit-cls-grade">Grade Level</Label>
                 <Input
-                  id="edit-cls-name"
-                  placeholder="e.g. 10A, 11 Science"
-                  {...editForm.register("name")}
+                  id="edit-cls-grade"
+                  type="number"
+                  min={1}
+                  max={13}
+                  placeholder="1-13"
+                  {...editForm.register("gradeLevel", { valueAsNumber: true })}
                 />
-                <FieldError message={editForm.formState.errors.name?.message} />
+                <FieldError message={editForm.formState.errors.gradeLevel?.message} />
+              </div>
+              <div>
+                <Label htmlFor="edit-cls-section">Section</Label>
+                <Input
+                  id="edit-cls-section"
+                  placeholder="e.g. A, Science"
+                  {...editForm.register("section")}
+                />
+                <FieldError message={editForm.formState.errors.section?.message} />
               </div>
               <div>
                 <Label htmlFor="edit-cls-year">Academic Year</Label>
@@ -765,6 +1108,14 @@ export default function ClassManagementPage() {
         classItem={rosterClass}
         open={!!rosterClass}
         onClose={() => setRosterClass(null)}
+      />
+
+      {/* Subject assignments modal */}
+      <SubjectAssignmentsModal
+        classItem={assignmentsClass}
+        teachers={teachers}
+        open={!!assignmentsClass}
+        onClose={() => setAssignmentsClass(null)}
       />
     </div>
   )

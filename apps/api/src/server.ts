@@ -11,9 +11,11 @@ import marksRouter from './modules/marks/marks.routes.js';
 import activitiesRouter from './modules/activities/activities.routes.js';
 import materialsRouter from './modules/materials/materials.routes.js';
 import subjectsRouter from './modules/subjects/subjects.routes.js';
+import teacherSubjectAssignmentsRouter from './modules/teacherSubjectAssignments/teacherSubjectAssignments.routes.js';
 import analyticsRouter from './modules/analytics/analytics.routes.js';
 import certificateRoutes from './routes/certificates.js';
 import studentCertificatesRouter from './modules/studentCertificates/studentCertificates.routes.js';
+import certificateTemplatesRouter from './modules/certificateTemplates/certificateTemplates.routes.js';
 
 dotenv.config();
 
@@ -70,6 +72,9 @@ app.use('/api/certificates', certificateRoutes);
 // studentsRouter, and the teacher's pending-list by teachersRouter.
 app.use('/api/student-certificates', studentCertificatesRouter);
 
+// Certificate letterhead template canvas routes (Admin/Principal-only, Story 12.8)
+app.use('/api/certificate-templates', certificateTemplatesRouter);
+
 // Marks management routes (bulk import)
 app.use('/api/marks', marksRouter);
 
@@ -82,6 +87,11 @@ app.use('/api/materials', materialsRouter);
 
 // Subject listing routes
 app.use('/api/subjects', subjectsRouter);
+
+// Teacher-subject-class assignment routes (Admin/Principal-only). The
+// class-scoped list route (GET /api/classes/:id/subject-assignments) is
+// mounted on classesRouter above, since it's a sub-resource of /api/classes.
+app.use('/api/teacher-subject-assignments', teacherSubjectAssignmentsRouter);
 
 // Academic performance analytics (class averages, progress trends, school-wide
 // aggregates). Mounted with the other routers, i.e. BEFORE the legacy mock

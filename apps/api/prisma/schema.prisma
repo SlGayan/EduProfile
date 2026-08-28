@@ -18,19 +18,20 @@ enum UserRole {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  role      UserRole
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
-  mustChangePassword Boolean @default(false)
-  student   Student?
-  teacher   Teacher?
-  issuedCertificates CharacterCertificate[]
-  reviewedActivities ExtracurricularActivity[]
+  id                          Int                        @id @default(autoincrement())
+  email                       String                     @unique
+  password                    String
+  role                        UserRole
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
+  deletedAt                   DateTime?
+  mustChangePassword          Boolean                    @default(false)
+  student                     Student?
+  teacher                     Teacher?
+  issuedCertificates          CharacterCertificate[]
+  reviewedActivities          ExtracurricularActivity[]
   reviewedStudentCertificates StudentCertificate[]
+  certificateTemplates        CertificateTemplate[]
 }
 
 enum StudentStatus {
@@ -39,30 +40,33 @@ enum StudentStatus {
 }
 
 model Student {
-  id          Int        @id @default(autoincrement())
-  userId      Int        @unique
-  user        User       @relation(fields: [userId], references: [id])
-  fullName    String
-  indexNumber String     @unique
-  dateOfBirth DateTime
-  address     String
-  nicNumber   String?    @unique
-  olYear      Int?
-  alYear      Int?
-  admissionNumber String? @unique
-  dateOfAdmission DateTime?
-  admissionGrade  String?
+  id                   Int                       @id @default(autoincrement())
+  userId               Int                       @unique
+  user                 User                      @relation(fields: [userId], references: [id])
+  fullName             String
+  indexNumber          String                    @unique
+  dateOfBirth          DateTime
+  address              String
+  nicNumber            String?                   @unique
+  olYear               Int?
+  alYear               Int?
+  admissionNumber      String?                   @unique
+  dateOfAdmission      DateTime?
+  admissionGrade       String?
   attendancePercentage Float?
-  photoUrl    String?
-  status      StudentStatus @default(ACTIVE)
-  classes     Class[]
-  termMarks   TermMark[]
-  activities  ExtracurricularActivity[]
-  certificates CharacterCertificate[]
-  studentCertificates StudentCertificate[]
-  guardian    Guardian?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  photoUrl             String?
+  phoneNumber          String?
+  status               StudentStatus              @default(ACTIVE)
+  classes              Class[]
+  enrollments          Enrollment[]
+  termMarks            TermMark[]
+  activities           ExtracurricularActivity[]
+  certificates         CharacterCertificate[]
+  studentCertificates  StudentCertificate[]
+  profileEditRequests  ProfileEditRequest[]
+  guardian             Guardian?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
 }
 
 model Guardian {
@@ -77,36 +81,71 @@ model Guardian {
 }
 
 model Teacher {
-  id             Int             @id @default(autoincrement())
-  userId         Int             @unique
-  user           User            @relation(fields: [userId], references: [id])
-  fullName       String?
-  phone          String?
-  classes        Class[]
-  studyMaterials StudyMaterial[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                          Int                        @id @default(autoincrement())
+  userId                      Int                        @unique
+  user                        User                       @relation(fields: [userId], references: [id])
+  displayName                 String?
+  phoneNumber                 String?
+  address                     String?
+  classes                     Class[]
+  studyMaterials              StudyMaterial[]
+  subjectAssignments          TeacherSubjectAssignment[]
+  reviewedProfileEditRequests ProfileEditRequest[]
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
 }
 
+// Story 13.1 — structured class identity. A class is identified by the triple
+// (gradeLevel, section, year), never by free text. The human-readable `name`
+// is NOT stored: per Epic 13 AD-9 it is derived at read time by
+// `src/lib/classIdentity.ts#deriveClassName` and still appears in every API
+// response, so read-only consumers are unaffected.
 model Class {
-  id             Int             @id @default(autoincrement())
-  name           String
-  year           Int?
-  teacherId      Int?
-  teacher        Teacher?        @relation(fields: [teacherId], references: [id])
-  students       Student[]
-  studyMaterials StudyMaterial[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 Int                        @id @default(autoincrement())
+  gradeLevel         Int
+  section            String
+  year               Int
+  teacherId          Int?
+  teacher            Teacher?                   @relation(fields: [teacherId], references: [id])
+  students           Student[]
+  enrollments        Enrollment[]
+  studyMaterials     StudyMaterial[]
+  subjectAssignments TeacherSubjectAssignment[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  @@unique([gradeLevel, section, year])
 }
 
 model Subject {
-  id             Int             @id @default(autoincrement())
-  name           String          @unique
-  termMarks      TermMark[]
-  studyMaterials StudyMaterial[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 Int                        @id @default(autoincrement())
+  name               String                     @unique
+  termMarks          TermMark[]
+  studyMaterials     StudyMaterial[]
+  teacherAssignments TeacherSubjectAssignment[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+}
+
+// Represents a teacher teaching a specific Subject within a specific Class,
+// independent of Class.teacherId ownership. `classId` implicitly carries the
+// year via the Class row it references, so no separate `year` field is
+// needed. See Story 2.6 / Epic 12 Story 12.3 (downstream authorization).
+model TeacherSubjectAssignment {
+  id        Int      @id @default(autoincrement())
+  teacherId Int
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  subjectId Int
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  classId   Int
+  class     Class    @relation(fields: [classId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teacherId, subjectId, classId])
+  @@index([teacherId])
+  @@index([subjectId])
+  @@index([classId])
 }
 
 model TermMark {
@@ -126,16 +165,50 @@ model TermMark {
   @@index([subjectId])
 }
 
+// Story 13.2 — enrollment as a time-bounded record (AD-1 Phase 1).
+// The implicit _ClassToStudent join table is kept and stays authoritative for
+// all reads; this model is written in sync by the enrol/unenrol paths, and
+// will become the sole source of truth in Story 13.8 (Phase 3).
+// AD-3: both FKs are ON DELETE RESTRICT — deleting a class or student that
+//       holds enrollment rows must fail with 409, never silently cascade.
+// AD-6: interval is half-open [enrolledAt, leftAt). leftAt IS NULL = open.
+// AD-10: status enum is fixed; no additions without human approval.
+enum EnrollmentStatus {
+  ACTIVE
+  TRANSFERRED
+  PROMOTED
+  REPEATED
+  LEFT
+}
+
+model Enrollment {
+  id          Int              @id @default(autoincrement())
+  studentId   Int
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId     Int
+  class       Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  enrolledAt  DateTime
+  leftAt      DateTime?
+  status      EnrollmentStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([studentId, classId, enrolledAt])
+  @@index([studentId])
+  @@index([classId])
+}
+
 enum ActivityStatus {
   PENDING
   APPROVED
   NEEDS_CORRECTION
   REJECTED
 }
+
 model ExtracurricularActivity {
-  id           Int       @id @default(autoincrement())
+  id           Int            @id @default(autoincrement())
   studentId    Int
-  student      Student   @relation(fields: [studentId], references: [id])
+  student      Student        @relation(fields: [studentId], references: [id])
   activityName String
   activityType String
   description  String?
@@ -146,12 +219,35 @@ model ExtracurricularActivity {
   status       ActivityStatus @default(PENDING)
   teacherNote  String?
   reviewedById Int?
-  reviewedBy   User?     @relation(fields: [reviewedById], references: [id])
+  reviewedBy   User?          @relation(fields: [reviewedById], references: [id])
   reviewedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   @@index([studentId])
+}
+
+enum ProfileRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ProfileEditRequest {
+  id                   Int                  @id @default(autoincrement())
+  studentId            Int
+  student              Student              @relation(fields: [studentId], references: [id])
+  requestedPhoneNumber String?
+  requestedAddress     String?
+  status               ProfileRequestStatus @default(PENDING)
+  teacherNote          String?
+  reviewedById         Int?
+  reviewedBy           Teacher?             @relation(fields: [reviewedById], references: [id])
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([studentId])
+  @@index([reviewedById])
 }
 
 model StudyMaterial {
@@ -180,18 +276,18 @@ enum CharacterGrade {
 }
 
 model CharacterCertificate {
-  id               String   @id // Format: DSCTH/CC/YYYY/NNNN
-  studentId        Int
-  student          Student  @relation(fields: [studentId], references: [id])
-  principalId      Int
-  principal        User     @relation(fields: [principalId], references: [id])
+  id                 String          @id // Format: DSCTH/CC/YYYY/NNNN
+  studentId          Int
+  student            Student         @relation(fields: [studentId], references: [id])
+  principalId        Int
+  principal          User            @relation(fields: [principalId], references: [id])
   selectedActivities String[]
-  reasonForLeaving String?
-  characterGrade   CharacterGrade?
-  studentAttributes String?
-  academicSummary  String?
-  issuedAt         DateTime @default(now())
-  contentSnapshot  Json
+  reasonForLeaving   String?
+  characterGrade     CharacterGrade?
+  studentAttributes  String?
+  academicSummary    String?
+  issuedAt           DateTime        @default(now())
+  contentSnapshot    Json
 
   @@index([studentId])
   @@index([principalId])
@@ -231,4 +327,22 @@ model StudentCertificate {
   updatedAt           DateTime @updatedAt
 
   @@index([studentId])
+}
+
+// A saved certificate letterhead layout (Story 12.8), selectable as an
+// alternative to CharacterCertificate's frozen default layout when issuing a
+// certificate. `layoutData` holds the canvas's bound-field positions
+// (student name, etc.) and free-type text blocks as an opaque JSON blob,
+// mirroring CharacterCertificate.contentSnapshot's use of Json for
+// structured, editor-owned data.
+model CertificateTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String
+  layoutData  Json
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
 }

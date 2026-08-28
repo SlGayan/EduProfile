@@ -10,6 +10,7 @@ import { AlertCircle, Trophy, Plus, Loader2, Paperclip } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { formatDateRange, toDateInputValue, type Activity } from "@/lib/activities"
 import { fetchMyStudentCertificates, extensionFromFileUrl, type StudentCertificate } from "@/lib/studentCertificates"
+import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -662,6 +663,7 @@ function normalizeCertificate(certificate: StudentCertificate): MyItem {
 
 export default function StudentActivitiesPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
 
   const activitiesQuery = useQuery({
     queryKey: ["my-activities"],
@@ -691,6 +693,13 @@ export default function StudentActivitiesPage() {
       setDownloadingId(null)
     }
   }
+
+  const pageCount = Math.max(1, Math.ceil(items.length / TABLE_PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pagedItems = items.slice(
+    (currentPage - 1) * TABLE_PAGE_SIZE,
+    currentPage * TABLE_PAGE_SIZE
+  )
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -744,7 +753,7 @@ export default function StudentActivitiesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((item) => (
+                  {pagedItems.map((item) => (
                     <TableRow key={`${item.kind}-${item.id}`}>
                       <TableCell>
                         <Badge variant="secondary">{item.kind === "ACTIVITY" ? "Activity" : "Certificate"}</Badge>
@@ -804,6 +813,7 @@ export default function StudentActivitiesPage() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
             </div>
           )}
         </CardContent>

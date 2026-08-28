@@ -1,9 +1,14 @@
 import { Router } from 'express';
 import { verifyToken, requireRole } from '../../middleware/authMiddleware.js';
 import { uploadMaterialFile } from './materials.upload.js';
-import { createMaterial, listMaterials, deleteMaterial, downloadMaterial } from './materials.controller.js';
+import { createMaterial, listMaterials, deleteMaterial, downloadMaterial, serveLocalBlob } from './materials.controller.js';
 
 const router = Router();
+
+// Dev-only: backs the local-disk fallback in materials.blob.ts for
+// environments without a working `az login` session. serveLocalBlob itself
+// 404s if NODE_ENV is production, so this route is inert in production.
+router.get('/local-blob/:key', verifyToken, serveLocalBlob);
 
 // Upload restricted to TEACHER: StudyMaterial.uploadedById is a required FK
 // to Teacher, and ADMINISTRATOR accounts don't necessarily have a Teacher

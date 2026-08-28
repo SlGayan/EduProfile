@@ -17,6 +17,9 @@ import {
   BarChart3,
   TrendingUp,
   ClipboardList,
+  PenLine,
+  UserPlus,
+  LayoutTemplate,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -28,13 +31,17 @@ import { getCurrentUser } from "@/lib/auth"
 
 const teacherNavItems = [
   { href: "/teacher/dashboard", label: "Dashboard", icon: Home },
+  { href: "/teacher/add-student", label: "Add Student", icon: UserPlus },
   { href: "/teacher/import-students", label: "Import Students", icon: Upload },
+  { href: "/teacher/add-marks", label: "Add Marks", icon: PenLine },
   { href: "/teacher/import-marks", label: "Import Marks", icon: FileSpreadsheet },
   { href: "/teacher/search-students", label: "Search Students", icon: Search },
+  { href: "/teacher/add-student-activity", label: "Add Student Activity", icon: Trophy },
   { href: "/teacher/class-marks", label: "Class Marks", icon: BarChart3 },
   { href: "/teacher/analytics", label: "Analytics", icon: TrendingUp },
-  { href: "/teacher/pending-activities", label: "Pending Approvals", icon: ClipboardList },
+  { href: "/teacher/pending-requests", label: "Pending Requests", icon: ClipboardList },
   { href: "/teacher/materials", label: "Study Materials", icon: FileText },
+  { href: "/teacher/profile", label: "My Profile", icon: User },
 ]
 
 const principalNavItems = [
@@ -42,6 +49,7 @@ const principalNavItems = [
   { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/principal/search-students", label: "Search Students", icon: Search },
   { href: "/principal/certificates", label: "Certificates", icon: FileText },
+  { href: "/admin/certificate-templates", label: "Certificate Templates", icon: LayoutTemplate },
   { href: "/principal/analytics", label: "Analytics", icon: TrendingUp },
 ]
 
@@ -49,6 +57,7 @@ const adminNavItems = [
   { href: "/admin/users", label: "User Management", icon: Users },
   { href: "/admin/classes", label: "Class Management", icon: School },
   { href: "/admin/search-students", label: "Search Students", icon: Search },
+  { href: "/admin/certificate-templates", label: "Certificate Templates", icon: LayoutTemplate },
 ]
 
 const studentNavItems = [
