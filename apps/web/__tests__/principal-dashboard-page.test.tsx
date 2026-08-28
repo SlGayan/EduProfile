@@ -1,14 +1,25 @@
 import "@testing-library/jest-dom/vitest"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest"
 import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import PrincipalDashboardPage from "@/app/(main)/principal/dashboard/page"
 
+/** Radix Select drives pointer APIs jsdom does not implement. */
+beforeAll(() => {
+  Element.prototype.hasPointerCapture = vi.fn(() => false)
+  Element.prototype.setPointerCapture = vi.fn()
+  Element.prototype.releasePointerCapture = vi.fn()
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
 /**
- * Story 10.4, Task 2 (AC1).
+ * Story: Principal Dashboard rebuild to match the supplied UI mockup.
  *
- * School Average must be a markCount-weighted mean of subjectAverages,
- * skipping null rows — never coerced to 0 (Read This First #2).
+ * The dashboard now sources its stats from `GET /api/principals/me/dashboard`
+ * (year/term/grade/class-scoped) instead of `GET /api/analytics/school`, and
+ * gained a fifth "Reports Pending" card plus Academic Year/Term/Grade/Class
+ * filters and a per-grade performance chart.
  */
 
 const apiFetchMock = vi.fn()
@@ -29,12 +40,40 @@ function renderPage() {
   )
 }
 
-function mockApi(analytics: unknown, ok = true, status = 200) {
+const populated = {
+  scope: { year: 2026, term: 2, gradeLevel: null, classId: null, subjectId: null },
+  filters: {
+    years: [2026, 2025],
+    grades: [9, 10],
+    classes: [
+      { id: 1, name: "Grade 9-A", gradeLevel: 9 },
+      { id: 2, name: "Grade 10-A", gradeLevel: 10 },
+    ],
+  },
+  totals: { studentCount: 101, activeStudentCount: 95 },
+  marksCompletion: { percent: 82, classesPending: 3, classCount: 6 },
+  reportsPending: 3,
+  schoolAverage: { current: 69.7, previousTerm: 68.1, deltaPercent: 1.6 },
+  gradePerformance: [
+    { gradeLevel: 9, average: 71.2, studentCount: 40, markCount: 200 },
+    { gradeLevel: 10, average: 68.4, studentCount: 61, markCount: 300 },
+  ],
+}
+
+function mockApi(dashboard: unknown, ok = true, status = 200) {
   apiFetchMock.mockImplementation((url: string) => {
     if (url === "/api/certificates/eligible-count") {
-      return Promise.resolve(jsonResponse({ count: 0 }))
+      return Promise.resolve(jsonResponse({ count: 6 }))
     }
-    return Promise.resolve(jsonResponse(analytics, ok, status))
+    if (url === "/api/subjects") {
+      return Promise.resolve(
+        jsonResponse([
+          { id: "1", name: "Mathematics" },
+          { id: "2", name: "Science" },
+        ]),
+      )
+    }
+    return Promise.resolve(jsonResponse(dashboard, ok, status))
   })
 }
 
@@ -42,138 +81,146 @@ beforeEach(() => {
   apiFetchMock.mockReset()
 })
 
-const populated = {
-  scope: { classId: null, year: null },
-  totals: { markCount: 240, studentCount: 30, unassignedMarkCount: 0 },
-  subjectAverages: [
-    { subjectId: 1, subject: "Mathematics", average: 70, markCount: 100 },
-    { subjectId: 2, subject: "Science", average: 60, markCount: 140 },
-  ],
-  classBreakdown: [
-    { classId: 1, className: "Grade 10-A", average: 72.4, studentCount: 30, scoredStudentCount: 24, markCount: 120 },
-  ],
-}
-
 describe("PrincipalDashboardPage — stat cards (populated)", () => {
-  it("renders Total Students and Marks Recorded from totals", async () => {
+  it("renders Total Students with the active-student caption", async () => {
     mockApi(populated)
     renderPage()
 
-    expect(await screen.findByText("30")).toBeInTheDocument()
-    expect(screen.getByText("240")).toBeInTheDocument()
+    expect(await screen.findByText("101")).toBeInTheDocument()
+    expect(screen.getByText("Active 95")).toBeInTheDocument()
   })
 
-  it("computes a markCount-weighted School Average, not a plain mean", async () => {
+  it("renders Marks Completion percent and pending-class count", async () => {
     mockApi(populated)
     renderPage()
 
-    // weighted: (70*100 + 60*140) / 240 = 64.2 -> rounds to 64.2
-    expect(await screen.findByText("64.2")).toBeInTheDocument()
+    await screen.findByText("101")
+    expect(screen.getByText("82%")).toBeInTheDocument()
+    expect(screen.getByText("3 classes pending")).toBeInTheDocument()
   })
 
-  it("requests the school analytics endpoint with no query params", async () => {
+  it("renders School Average with a positive delta from the previous term", async () => {
     mockApi(populated)
     renderPage()
 
-    await screen.findByText("30")
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/analytics/school")
+    await screen.findByText("101")
+    expect(screen.getByText("69.7%")).toBeInTheDocument()
+    expect(screen.getByText(/1\.6% from Term 1/)).toBeInTheDocument()
   })
 
-  it("drops the old Total Teachers and Academic Reports cards", async () => {
+  it("renders Cert Requests from the eligible-count endpoint, linking to the certificates page", async () => {
     mockApi(populated)
     renderPage()
 
-    await screen.findByText("30")
-    expect(screen.queryByText("Total Teachers")).not.toBeInTheDocument()
-    expect(screen.queryByText("Academic Reports")).not.toBeInTheDocument()
-  })
-})
-
-describe("PrincipalDashboardPage — null averages excluded from the weighted mean", () => {
-  it("skips a null subject average rather than coercing it to 0", async () => {
-    mockApi({
-      ...populated,
-      subjectAverages: [
-        { subjectId: 1, subject: "Mathematics", average: 70, markCount: 100 },
-        { subjectId: 2, subject: "Science", average: null, markCount: 0 },
-      ],
-    })
-    renderPage()
-
-    // Only Mathematics counts: weighted average = 70.
-    expect(await screen.findByText("70")).toBeInTheDocument()
+    await screen.findByText("101")
+    expect(await screen.findByText("6")).toBeInTheDocument()
+    expect(screen.getByText("Pending Review")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /Cert Requests/ })).toHaveAttribute(
+      "href",
+      "/principal/certificates",
+    )
   })
 
-  it("excludes a null-average row from the weighted denominator even if its markCount is nonzero", async () => {
-    mockApi({
-      ...populated,
-      subjectAverages: [
-        { subjectId: 1, subject: "Mathematics", average: 70, markCount: 100 },
-        // Defensively malformed (average null with markCount > 0 should not
-        // happen per the API contract) — still must not drag the average down.
-        { subjectId: 2, subject: "Science", average: null, markCount: 50 },
-      ],
-    })
-    renderPage()
-
-    expect(await screen.findByText("70")).toBeInTheDocument()
-  })
-
-  it("renders — when every subject average is null", async () => {
-    mockApi({
-      ...populated,
-      subjectAverages: [{ subjectId: 1, subject: "Mathematics", average: null, markCount: 0 }],
-    })
-    renderPage()
-
-    expect(await screen.findByText("—")).toBeInTheDocument()
-  })
-})
-
-describe("PrincipalDashboardPage — unassigned marks note", () => {
-  it("shows the unassigned-marks note only when unassignedMarkCount > 0", async () => {
-    mockApi({
-      ...populated,
-      totals: { ...populated.totals, unassignedMarkCount: 5 },
-    })
-    renderPage()
-
-    expect(await screen.findByText(/5.*not currently in any class/i)).toBeInTheDocument()
-  })
-
-  it("does not show the note when unassignedMarkCount is 0", async () => {
+  it("renders Reports Pending from the dashboard response", async () => {
     mockApi(populated)
     renderPage()
 
-    await screen.findByText("30")
-    expect(screen.queryByText(/not currently in any class/i)).not.toBeInTheDocument()
+    await screen.findByText("101")
+    expect(screen.getByText("Missing term marks")).toBeInTheDocument()
+  })
+
+  it("requests the principal dashboard endpoint with no query params on first load", async () => {
+    mockApi(populated)
+    renderPage()
+
+    await screen.findByText("101")
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/principals/me/dashboard")
   })
 })
 
 describe("PrincipalDashboardPage — loading and error states", () => {
-  it("shows skeleton stat cards while loading", () => {
+  it("shows five skeleton stat cards while loading", () => {
     apiFetchMock.mockImplementation(() => new Promise(() => {}))
     renderPage()
 
-    expect(screen.getAllByTestId("stat-card-skeleton")).toHaveLength(3)
+    expect(screen.getAllByTestId("stat-card-skeleton")).toHaveLength(5)
   })
 
   it("shows a destructive alert on error", async () => {
     mockApi(null, false, 403)
     renderPage()
 
-    expect(await screen.findByText("Failed to load school analytics")).toBeInTheDocument()
+    expect(await screen.findByText("Failed to load the principal dashboard")).toBeInTheDocument()
   })
 })
 
-describe("PrincipalDashboardPage — untouched sections", () => {
-  it("still renders Recent Activities and Quick Actions as static content", async () => {
+describe("PrincipalDashboardPage — filters", () => {
+  it("re-requests the dashboard with the chosen year when Academic Year changes", async () => {
+    mockApi(populated)
+    renderPage()
+    await screen.findByText("101")
+
+    const user = userEvent.setup()
+    await user.click(screen.getByLabelText("Academic Year"))
+    await user.click(await screen.findByRole("option", { name: "2025" }))
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/principals/me/dashboard?year=2025")
+  })
+
+  it("re-requests the dashboard with the chosen grade when Grade changes", async () => {
+    mockApi(populated)
+    renderPage()
+    await screen.findByText("101")
+
+    const user = userEvent.setup()
+    await user.click(screen.getByLabelText("Grade"))
+    await user.click(await screen.findByRole("option", { name: "Grade 9" }))
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/principals/me/dashboard?gradeLevel=9")
+  })
+
+  it("re-requests the dashboard with the chosen subject when the chart's Subject filter changes", async () => {
+    mockApi(populated)
+    renderPage()
+    await screen.findByText("101")
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByLabelText("Subject"))
+    await user.click(await screen.findByRole("option", { name: "Mathematics" }))
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/principals/me/dashboard?subjectId=1")
+  })
+})
+
+describe("PrincipalDashboardPage — Quick Actions", () => {
+  it("links every quick action to its destination page", async () => {
     mockApi(populated)
     renderPage()
 
-    await screen.findByText("30")
-    expect(screen.getByText("Recent Activities")).toBeInTheDocument()
-    expect(screen.getByText("Quick Actions")).toBeInTheDocument()
-    expect(screen.getByText("New academic year started")).toBeInTheDocument()
+    await screen.findByText("101")
+    expect(screen.getByRole("link", { name: /View Analytics/ })).toHaveAttribute(
+      "href",
+      "/principal/analytics",
+    )
+    expect(screen.getByRole("link", { name: /Search Student \/ Alumni/ })).toHaveAttribute(
+      "href",
+      "/principal/search-students",
+    )
+    expect(screen.getByRole("link", { name: /Create Class/ })).toHaveAttribute(
+      "href",
+      "/admin/classes?create=1",
+    )
+    expect(screen.getByRole("link", { name: /Issue New Certificate/ })).toHaveAttribute(
+      "href",
+      "/principal/issue-certificate",
+    )
+    expect(screen.getByRole("link", { name: /View Pending Marks/ })).toHaveAttribute(
+      "href",
+      "/principal/pending-marks",
+    )
+    expect(screen.getByRole("link", { name: /Generate School Report/ })).toHaveAttribute(
+      "href",
+      "/principal/analytics",
+    )
   })
 })
