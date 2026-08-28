@@ -112,8 +112,8 @@ async function main() {
     const details = teacherDetails[email]!;
     const profile = await prisma.teacher.upsert({
       where: { userId: u.id },
-      update: { fullName: details.fullName, phone: details.phone },
-      create: { userId: u.id, fullName: details.fullName, phone: details.phone },
+      update: { displayName: details.fullName, phoneNumber: details.phone },
+      create: { userId: u.id, displayName: details.fullName, phoneNumber: details.phone },
     });
     teacherProfiles.set(email, profile);
   }
