@@ -3,6 +3,7 @@ import { AuthRequest } from '../../middleware/authMiddleware.js';
 import { PrismaClient } from '@prisma/client';
 import { classAnalyticsQuerySchema } from '../../validators/analyticsValidators.js';
 import { READ_TX_OPTIONS, round2 } from '../../lib/queryHelpers.js';
+import { deriveClassName } from '../../lib/classIdentity.js';
 
 // Per-module client, matching every other file in apps/api/src. No shared
 // singleton exists in this codebase; introducing one is out of scope here.
@@ -58,7 +59,8 @@ export const getTeacherDashboard = async (req: AuthRequest, res: Response) => {
             take: 1,
             select: {
               id: true,
-              name: true,
+              gradeLevel: true,
+              section: true,
               students: {
                 where: { user: { deletedAt: null } },
                 select: { id: true },
@@ -93,7 +95,7 @@ export const getTeacherDashboard = async (req: AuthRequest, res: Response) => {
         return {
           authz: null,
           classId: primaryClass.id,
-          className: primaryClass.name,
+          className: deriveClassName(primaryClass),
           studentCount: 0,
           marksPending: 0,
           classAverage: null,
@@ -134,7 +136,7 @@ export const getTeacherDashboard = async (req: AuthRequest, res: Response) => {
         return {
           authz: null,
           classId: primaryClass.id,
-          className: primaryClass.name,
+          className: deriveClassName(primaryClass),
           studentCount,
           marksPending: studentCount,
           classAverage: null,
@@ -214,7 +216,7 @@ export const getTeacherDashboard = async (req: AuthRequest, res: Response) => {
       return {
         authz: null,
         classId: primaryClass.id,
-        className: primaryClass.name,
+        className: deriveClassName(primaryClass),
         studentCount,
         marksPending,
         classAverage,

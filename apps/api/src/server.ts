@@ -7,6 +7,7 @@ import usersRouter from './routes/users.js';
 import classesRouter from './routes/classes.js';
 import studentsRouter from './routes/students.js';
 import teachersRouter from './routes/teachers.js';
+import principalsRouter from './routes/principals.js';
 import marksRouter from './modules/marks/marks.routes.js';
 import activitiesRouter from './modules/activities/activities.routes.js';
 import materialsRouter from './modules/materials/materials.routes.js';
@@ -14,6 +15,7 @@ import subjectsRouter from './modules/subjects/subjects.routes.js';
 import teacherSubjectAssignmentsRouter from './modules/teacherSubjectAssignments/teacherSubjectAssignments.routes.js';
 import analyticsRouter from './modules/analytics/analytics.routes.js';
 import certificateRoutes from './routes/certificates.js';
+import studentCertificatesRouter from './modules/studentCertificates/studentCertificates.routes.js';
 import certificateTemplatesRouter from './modules/certificateTemplates/certificateTemplates.routes.js';
 
 dotenv.config();
@@ -63,8 +65,16 @@ app.use('/api/students', studentsRouter);
 // Teacher listing routes
 app.use('/api/teachers', teachersRouter);
 
+// Principal dashboard routes
+app.use('/api/principals', principalsRouter);
+
 // Certificate routes
 app.use('/api/certificates', certificateRoutes);
+
+// Student-added certificate review routes (status update, evidence file for
+// reviewers). The student-scoped submit/list/download routes are served by
+// studentsRouter, and the teacher's pending-list by teachersRouter.
+app.use('/api/student-certificates', studentCertificatesRouter);
 
 // Certificate letterhead template canvas routes (Admin/Principal-only, Story 12.8)
 app.use('/api/certificate-templates', certificateTemplatesRouter);

@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -86,8 +86,13 @@ interface ApiStudentRecord {
 
 interface ApiClass {
   id: number
+  // Story 13.1 — `name` is derived by the API from gradeLevel/section, not
+  // stored. It is still returned on every class response, so display code
+  // keeps reading it; only the write path sends the structured fields.
   name: string
-  year: number | null
+  gradeLevel: number
+  section: string
+  year: number
   teacherId: number | null
   teacher: ApiTeacherRecord | null
   students: { id: number }[]
@@ -128,13 +133,18 @@ interface ApiUser {
 // ---------------------------------------------------------------------------
 
 const classSchema = z.object({
-  name: z.string().min(1, "Class name is required"),
+  gradeLevel: z
+    .number({ invalid_type_error: "Grade must be a number" })
+    .int()
+    .min(1, "Grade must be between 1 and 13")
+    .max(13, "Grade must be between 1 and 13"),
+  section: z.string().min(1, "Section is required"),
+  // Required, not optional: the API rejects a class with no academic year.
   year: z
     .number({ invalid_type_error: "Year must be a number" })
     .int()
     .min(2000, "Year must be 2000 or later")
-    .max(2100, "Year must be 2100 or earlier")
-    .optional(),
+    .max(2100, "Year must be 2100 or earlier"),
 })
 
 type ClassFormValues = z.infer<typeof classSchema>
@@ -677,6 +687,15 @@ function SubjectAssignmentsModal({
 // ---------------------------------------------------------------------------
 
 export default function ClassManagementPage() {
+  return (
+    // useSearchParams requires a Suspense boundary in the App Router.
+    <Suspense fallback={null}>
+      <ClassManagementPageInner />
+    </Suspense>
+  )
+}
+
+function ClassManagementPageInner() {
   const router = useRouter()
   const queryClient = useQueryClient()
 
@@ -718,13 +737,16 @@ export default function ClassManagementPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createForm = useForm<ClassFormValues>({
     resolver: zodResolver(classSchema as any),
-    defaultValues: { name: "", year: new Date().getFullYear() },
+    defaultValues: { gradeLevel: 1, section: "", year: new Date().getFullYear() },
   })
 
   const createMutation = useMutation({
     mutationFn: async (values: ClassFormValues) => {
-      const body: Record<string, unknown> = { name: values.name }
-      if (values.year) body.year = values.year
+      const body: Record<string, unknown> = {
+        gradeLevel: values.gradeLevel,
+        section: values.section,
+        year: values.year,
+      }
       if (createTeacherId !== "none") body.teacherId = Number(createTeacherId)
 
       const res = await apiFetch("/api/classes", {
@@ -745,24 +767,43 @@ export default function ClassManagementPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  // Deep-link support for `/admin/classes?create=1` — the Principal
+  // Dashboard's "Create Class" quick action lands here and should open the
+  // dialog immediately rather than making the principal find the button.
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      createForm.reset()
+      setCreateTeacherId("none")
+      setCreateOpen(true)
+    }
+    // Intentionally run only once on mount: re-running on every searchParams
+    // change would reopen the dialog if the user closes it without the URL
+    // itself changing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Edit form
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const editForm = useForm<ClassFormValues>({
     resolver: zodResolver(classSchema as any),
-    defaultValues: { name: "", year: new Date().getFullYear() },
+    defaultValues: { gradeLevel: 1, section: "", year: new Date().getFullYear() },
   })
 
   const openEdit = (cls: ApiClass) => {
     setEditClass(cls)
-    editForm.reset({ name: cls.name, year: cls.year ?? undefined })
+    editForm.reset({ gradeLevel: cls.gradeLevel, section: cls.section, year: cls.year })
     setEditTeacherId(cls.teacherId !== null ? String(cls.teacherId) : "none")
   }
 
   const editMutation = useMutation({
     mutationFn: async (values: ClassFormValues) => {
       if (!editClass) return
-      const body: Record<string, unknown> = { name: values.name }
-      if (values.year !== undefined) body.year = values.year
+      const body: Record<string, unknown> = {
+        gradeLevel: values.gradeLevel,
+        section: values.section,
+        year: values.year,
+      }
       body.teacherId = editTeacherId !== "none" ? Number(editTeacherId) : null
 
       const res = await apiFetch(`/api/classes/${editClass.id}`, {
@@ -859,7 +900,7 @@ export default function ClassManagementPage() {
               {classes.map((cls) => (
                 <TableRow key={cls.id}>
                   <TableCell className="font-medium">{cls.name}</TableCell>
-                  <TableCell>{cls.year ?? <span className="text-muted-foreground text-sm">—</span>}</TableCell>
+                  <TableCell>{cls.year}</TableCell>
                   <TableCell>
                     {cls.teacher ? (
                       cls.teacher.user.email
@@ -924,13 +965,25 @@ export default function ClassManagementPage() {
           <form onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}>
             <div className="space-y-4 py-2">
               <div>
-                <Label htmlFor="create-cls-name">Class Name</Label>
+                <Label htmlFor="create-cls-grade">Grade Level</Label>
                 <Input
-                  id="create-cls-name"
-                  placeholder="e.g. 10A, 11 Science"
-                  {...createForm.register("name")}
+                  id="create-cls-grade"
+                  type="number"
+                  min={1}
+                  max={13}
+                  placeholder="1-13"
+                  {...createForm.register("gradeLevel", { valueAsNumber: true })}
                 />
-                <FieldError message={createForm.formState.errors.name?.message} />
+                <FieldError message={createForm.formState.errors.gradeLevel?.message} />
+              </div>
+              <div>
+                <Label htmlFor="create-cls-section">Section</Label>
+                <Input
+                  id="create-cls-section"
+                  placeholder="e.g. A, Science"
+                  {...createForm.register("section")}
+                />
+                <FieldError message={createForm.formState.errors.section?.message} />
               </div>
               <div>
                 <Label htmlFor="create-cls-year">Academic Year</Label>
@@ -984,13 +1037,25 @@ export default function ClassManagementPage() {
           <form onSubmit={editForm.handleSubmit((v) => editMutation.mutate(v))}>
             <div className="space-y-4 py-2">
               <div>
-                <Label htmlFor="edit-cls-name">Class Name</Label>
+                <Label htmlFor="edit-cls-grade">Grade Level</Label>
                 <Input
-                  id="edit-cls-name"
-                  placeholder="e.g. 10A, 11 Science"
-                  {...editForm.register("name")}
+                  id="edit-cls-grade"
+                  type="number"
+                  min={1}
+                  max={13}
+                  placeholder="1-13"
+                  {...editForm.register("gradeLevel", { valueAsNumber: true })}
                 />
-                <FieldError message={editForm.formState.errors.name?.message} />
+                <FieldError message={editForm.formState.errors.gradeLevel?.message} />
+              </div>
+              <div>
+                <Label htmlFor="edit-cls-section">Section</Label>
+                <Input
+                  id="edit-cls-section"
+                  placeholder="e.g. A, Science"
+                  {...editForm.register("section")}
+                />
+                <FieldError message={editForm.formState.errors.section?.message} />
               </div>
               <div>
                 <Label htmlFor="edit-cls-year">Academic Year</Label>

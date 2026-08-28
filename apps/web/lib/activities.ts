@@ -5,6 +5,8 @@
  * Story 8.4's read-only student view uses only `Activity`/`formatDateRange`.
  */
 
+import { apiFetch } from "@/lib/apiFetch"
+
 /**
  * An activity as returned by the API.
  *
@@ -23,6 +25,8 @@ export interface Activity {
   status?: "PENDING" | "APPROVED" | "NEEDS_CORRECTION" | "REJECTED"
   evidenceUrl?: string | null
   teacherNote?: string | null
+  reviewedByName?: string | null
+  reviewedAt?: string | null
   studentName?: string
   admissionNumber?: string | null
 }
@@ -46,6 +50,19 @@ export function formatDateRange(startDate: string, endDate: string | null): stri
   const start = toDateInputValue(startDate)
   const end = endDate ? toDateInputValue(endDate) : ""
   return `${start} – ${end || "Ongoing"}`
+}
+
+/**
+ * Shared with the teacher dashboard's pending-activities stat card: both use
+ * the query key "pending-activities" so the count and the full review table
+ * read from the same cache entry instead of issuing duplicate requests.
+ */
+export async function fetchPendingActivities(): Promise<Activity[]> {
+  const response = await apiFetch("/api/teachers/me/pending-activities")
+  if (!response.ok) {
+    throw new Error("Failed to load pending activities")
+  }
+  return response.json()
 }
 
 interface ZodIssueLike {

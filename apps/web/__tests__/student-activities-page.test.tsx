@@ -5,13 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import StudentActivitiesPage from "@/app/(main)/student/activities/page"
 
 /**
- * Closes Story 8.4 subtasks 6.3 and 6.4, which are otherwise only verifiable
- * by eye in a browser. These render the real component in jsdom against a
- * mocked API and assert on the output.
- *
- * NOTE: this is the first component test in this repo — the four pre-existing
- * test files all cover pure functions in lib/. It verifies rendering logic,
- * not real-browser layout.
+ * Covers the merged Activities + self-added Certificates list on the student
+ * "My Activities" page: both submission types share one review workflow, so
+ * they render as one list instead of two separate pages. Renders the real
+ * component in jsdom against a mocked API and asserts on the output.
  */
 
 const apiFetchMock = vi.fn()
@@ -21,6 +18,34 @@ vi.mock("@/lib/apiFetch", () => ({
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => body } as unknown as Response
+}
+
+/**
+ * The page fires two independent queries (activities, self-added
+ * certificates). Routing the mock by URL keeps each test's fixture in the
+ * shape the corresponding normalizer actually expects, instead of one array
+ * masquerading as both.
+ */
+function mockEndpoints({
+  activities = [],
+  certificates = [],
+  activitiesOk = true,
+  activitiesStatus = 200,
+}: {
+  activities?: unknown[]
+  certificates?: unknown[]
+  activitiesOk?: boolean
+  activitiesStatus?: number
+}) {
+  apiFetchMock.mockImplementation((url: string) => {
+    if (url === "/api/students/me/activities") {
+      return Promise.resolve(jsonResponse(activitiesOk ? activities : { error: "Student profile not found" }, activitiesOk, activitiesStatus))
+    }
+    if (url === "/api/students/me/student-certificates") {
+      return Promise.resolve(jsonResponse(certificates))
+    }
+    throw new Error(`Unexpected apiFetch call: ${url}`)
+  })
 }
 
 function renderPage() {
@@ -44,101 +69,137 @@ const oneActivity = {
   achievements: "Runner up",
 }
 
+const oneCertificate = {
+  id: "21",
+  title: "Intro to Python",
+  issuingOrganization: "Coursera",
+  category: "Academic",
+  issueDate: "2026-02-01T00:00:00.000Z",
+  description: null,
+  evidenceUrl: "https://example.com/cert",
+  fileUrl: null,
+  fileType: null,
+}
+
 beforeEach(() => {
   apiFetchMock.mockReset()
 })
 
-describe("StudentActivitiesPage — empty state (AC2, subtask 6.3)", () => {
-  it("renders the friendly empty block, not a blank card, when the API returns []", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([]))
+describe("StudentActivitiesPage — empty state", () => {
+  it("renders the friendly empty block, not a blank card, when both endpoints return []", async () => {
+    mockEndpoints({})
     renderPage()
 
-    expect(await screen.findByText("No activities recorded yet")).toBeInTheDocument()
-    expect(
-      screen.getByText(/haven't submitted any extracurricular activities/i),
-    ).toBeInTheDocument()
+    expect(await screen.findByText("Nothing recorded yet")).toBeInTheDocument()
   })
 
-  it("shows no results table when there are no activities", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([]))
+  it("shows no results table when there is nothing recorded", async () => {
+    mockEndpoints({})
     renderPage()
 
-    await screen.findByText("No activities recorded yet")
+    await screen.findByText("Nothing recorded yet")
     expect(screen.queryByRole("table")).not.toBeInTheDocument()
   })
 
-  it("calls the /me endpoint, not a teacher endpoint", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([]))
+  it("calls the /me endpoints, not a teacher endpoint", async () => {
+    mockEndpoints({})
     renderPage()
 
-    await screen.findByText("No activities recorded yet")
+    await screen.findByText("Nothing recorded yet")
     expect(apiFetchMock).toHaveBeenCalledWith("/api/students/me/activities")
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/students/me/student-certificates")
   })
 })
 
-describe("StudentActivitiesPage — populated list (AC1, subtask 6.4)", () => {
-  it("renders the four specified columns", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([oneActivity]))
+describe("StudentActivitiesPage — populated list", () => {
+  it("renders the merged table's columns", async () => {
+    mockEndpoints({ activities: [oneActivity] })
     renderPage()
 
     expect(await screen.findByText("Debate Club")).toBeInTheDocument()
-    for (const header of ["Activity", "Type", "Dates", "Achievements"]) {
+    for (const header of ["Type", "Item", "Category", "Date", "Evidence", "Status", "Actions"]) {
       expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument()
     }
   })
 
-  it("renders the activity's values, with the date range formatted", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([oneActivity]))
+  it("renders an activity row with its values and date range formatted", async () => {
+    mockEndpoints({ activities: [oneActivity] })
     renderPage()
 
     expect(await screen.findByText("Debate Club")).toBeInTheDocument()
     expect(screen.getByText("Club")).toBeInTheDocument()
     expect(screen.getByText("2026-01-15 – 2026-06-15")).toBeInTheDocument()
     expect(screen.getByText("Runner up")).toBeInTheDocument()
-  })
-
-  it("renders an em dash when achievements is null", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([{ ...oneActivity, achievements: null }]))
-    renderPage()
-
-    expect(await screen.findByText("Debate Club")).toBeInTheDocument()
-    expect(screen.getByText("—")).toBeInTheDocument()
+    expect(screen.getByText("Activity")).toBeInTheDocument()
   })
 
   it("shows 'Ongoing' when the activity has no end date", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([{ ...oneActivity, endDate: null }]))
+    mockEndpoints({ activities: [{ ...oneActivity, endDate: null }] })
     renderPage()
 
     expect(await screen.findByText("2026-01-15 – Ongoing")).toBeInTheDocument()
   })
 
-  it("renders submit activity button and conditionally renders correction actions", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([oneActivity]))
+  it("renders a certificate row alongside an activity row", async () => {
+    mockEndpoints({ activities: [oneActivity], certificates: [oneCertificate] })
+    renderPage()
+
+    expect(await screen.findByText("Debate Club")).toBeInTheDocument()
+    expect(screen.getByText("Intro to Python")).toBeInTheDocument()
+    expect(screen.getByText("Academic")).toBeInTheDocument()
+    expect(screen.getByText("Certificate")).toBeInTheDocument()
+    expect(screen.getByText("Link")).toBeInTheDocument()
+  })
+
+  it("renders submit buttons and no correction actions when nothing needs correction", async () => {
+    mockEndpoints({ activities: [oneActivity] })
     renderPage()
 
     await screen.findByText("Debate Club")
     expect(screen.getByRole("button", { name: /submit activity/i })).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /correct/i })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /add certificate/i })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^correct$/i })).not.toBeInTheDocument()
   })
 
-  it("renders correct button when status is NEEDS_CORRECTION", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([{ ...oneActivity, status: "NEEDS_CORRECTION", teacherNote: "Please provide evidence" }]))
+  it("renders a correct button and the teacher's note when an activity needs correction", async () => {
+    mockEndpoints({
+      activities: [{ ...oneActivity, status: "NEEDS_CORRECTION", teacherNote: "Please provide evidence" }],
+    })
     renderPage()
 
     await screen.findByText("Debate Club")
     expect(screen.getByText(/Note: Please provide evidence/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /correct/i })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^correct$/i })).toBeInTheDocument()
+  })
+
+  it("renders a correct button when a certificate needs correction", async () => {
+    mockEndpoints({
+      certificates: [{ ...oneCertificate, status: "NEEDS_CORRECTION", teacherNote: "Add the certificate file" }],
+    })
+    renderPage()
+
+    await screen.findByText("Intro to Python")
+    expect(screen.getByText(/Note: Add the certificate file/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^correct$/i })).toBeInTheDocument()
+  })
+
+  it("shows the reviewer name and date once an item has been reviewed", async () => {
+    mockEndpoints({
+      activities: [{ ...oneActivity, status: "APPROVED", reviewedByName: "Mrs. S. Silva", reviewedAt: "2026-03-01T00:00:00.000Z" }],
+    })
+    renderPage()
+
+    await screen.findByText("Debate Club")
+    expect(screen.getByText(/by Mrs\. S\. Silva on 2026-03-01/i)).toBeInTheDocument()
   })
 })
 
 describe("StudentActivitiesPage — error handling", () => {
   it("surfaces the API's message when the student has no profile row", async () => {
-    apiFetchMock.mockResolvedValue(
-      jsonResponse({ error: "Student profile not found" }, false, 404),
-    )
+    mockEndpoints({ activitiesOk: false, activitiesStatus: 404 })
     renderPage()
 
     expect(await screen.findByText("Student profile not found")).toBeInTheDocument()
-    expect(screen.queryByText("No activities recorded yet")).not.toBeInTheDocument()
+    expect(screen.queryByText("Nothing recorded yet")).not.toBeInTheDocument()
   })
 })

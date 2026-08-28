@@ -21,7 +21,23 @@ export type AuthzFailure = { status: number; error: string };
  */
 const ROLE_ADMIN = 'admin';
 
-function serializeActivity(activity: ExtracurricularActivity) {
+// Reviewer relation is selected consistently wherever an activity is
+// returned, so this shape is the one place the include and the read agree.
+const REVIEWER_INCLUDE = {
+  reviewedBy: { select: { email: true, teacher: { select: { displayName: true } } } },
+} as const;
+
+type ActivityWithReviewer = ExtracurricularActivity & {
+  reviewedBy?: { email: string; teacher: { displayName: string | null } | null } | null;
+};
+
+/** A teacher's display name if they have one, else the reviewing user's email (covers admin reviewers). */
+function reviewerDisplayName(reviewedBy: ActivityWithReviewer['reviewedBy']): string | null {
+  if (!reviewedBy) return null;
+  return reviewedBy.teacher?.displayName ?? reviewedBy.email;
+}
+
+function serializeActivity(activity: ActivityWithReviewer) {
   return {
     id: String(activity.id),
     activityName: activity.activityName,
@@ -33,6 +49,8 @@ function serializeActivity(activity: ExtracurricularActivity) {
     status: activity.status,
     teacherNote: activity.teacherNote,
     evidenceUrl: activity.evidenceUrl,
+    reviewedByName: reviewerDisplayName(activity.reviewedBy),
+    reviewedAt: activity.reviewedAt ? activity.reviewedAt.toISOString() : null,
   };
 }
 
@@ -160,6 +178,7 @@ export const listActivities = async (req: AuthRequest, res: Response) => {
       // are common and would otherwise come back in arbitrary Postgres order,
       // visibly reshuffling the list between identical requests.
       orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+      include: REVIEWER_INCLUDE,
     });
 
     // A student with no activities is an empty array, never a 404 — Story 8.4's
@@ -208,6 +227,8 @@ export const createActivity = async (req: AuthRequest, res: Response) => {
         achievements: achievements ?? null,
         evidenceUrl: evidenceUrl ?? null,
         status: 'APPROVED',
+        reviewedById: req.user!.id,
+        reviewedAt: new Date(),
       },
     });
 
@@ -337,6 +358,7 @@ export const listMyActivities = async (req: AuthRequest, res: Response) => {
       // `id` tiebreaker: date-only values all store as UTC midnight, so ties
       // are the norm and Postgres would otherwise order them arbitrarily.
       orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+      include: REVIEWER_INCLUDE,
     });
 
     // Empty is `200 []`, never 404 — the page's empty state depends on it.
@@ -442,10 +464,13 @@ export const reviewActivity = async (req: AuthRequest, res: Response) => {
 
     const updated = await prisma.extracurricularActivity.update({
       where: { id: activityId },
-      data: { 
+      data: {
         status,
-        teacherNote: teacherNote ?? null
+        teacherNote: teacherNote ?? null,
+        reviewedById: req.user!.id,
+        reviewedAt: new Date(),
       },
+      include: REVIEWER_INCLUDE,
     });
 
     return res.status(200).json(serializeActivity(updated));
@@ -501,6 +526,8 @@ export const updateMyActivity = async (req: AuthRequest, res: Response) => {
         ...(startDate !== undefined && { startDate: nextStartDate }),
         ...(endDate !== undefined && { endDate: nextEndDate }),
         status: 'PENDING',
+        reviewedById: null,
+        reviewedAt: null,
       }
     });
 

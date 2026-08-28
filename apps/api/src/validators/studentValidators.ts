@@ -101,6 +101,41 @@ export const studentImportRowSchema = z.object({
 
 export type StudentImportRow = z.infer<typeof studentImportRowSchema>;
 
+// Self-service edits (Personal Information card, PATCH /api/students/me).
+// Identity/administrative fields (fullName, indexNumber, dateOfBirth,
+// olYear, alYear, assignedClass) are intentionally excluded — those stay
+// staff-managed, matching the CSV import / search flows above.
+export const updateMyProfileSchema = z
+  .object({
+    address: z.string().trim().min(1, 'Address is required').max(500).optional(),
+    nicNumber: z
+      .string()
+      .trim()
+      .max(20)
+      .optional()
+      .transform((val) => (val === '' ? null : val)),
+    email: z.string().email().endsWith('@edu.com', 'Email must end with @edu.com').optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update' });
+
+export type UpdateMyProfileInput = z.infer<typeof updateMyProfileSchema>;
+
+export const upsertGuardianSchema = z
+  .object({
+    guardianName: z.string().trim().min(1, 'Guardian name is required').max(255),
+    primaryPhone: z.string().trim().min(1, 'Primary phone number is required').max(30),
+    emergencyContactPhone: z
+      .string()
+      .trim()
+      .max(30)
+      .optional()
+      .transform((val) => (val === undefined || val === '' ? null : val)),
+  })
+  .strict();
+
+export type UpsertGuardianInput = z.infer<typeof upsertGuardianSchema>;
+
 /**
  * Single-record equivalent of `studentImportRowSchema` for `POST /api/students`.
  * Same field rules (including the `@edu.com` email domain restriction), but

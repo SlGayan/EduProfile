@@ -12,6 +12,7 @@ import {
   User,
   Award,
   Trophy,
+  ScrollText,
   School,
   BarChart3,
   TrendingUp,
@@ -50,6 +51,7 @@ const principalNavItems = [
   { href: "/principal/certificates", label: "Certificates", icon: FileText },
   { href: "/admin/certificate-templates", label: "Certificate Templates", icon: LayoutTemplate },
   { href: "/principal/analytics", label: "Analytics", icon: TrendingUp },
+  { href: "/principal/pending-marks", label: "Pending Marks", icon: ClipboardList },
 ]
 
 const adminNavItems = [
@@ -63,6 +65,7 @@ const studentNavItems = [
   { href: "/student/profile", label: "My Profile", icon: User },
   { href: "/student/marks", label: "My Marks", icon: Award },
   { href: "/student/activities", label: "My Activities", icon: Trophy },
+  { href: "/student/certificates", label: "Character Certificates", icon: ScrollText },
   { href: "/student/materials", label: "Study Materials", icon: FileText },
 ]
 

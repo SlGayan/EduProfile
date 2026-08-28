@@ -18,18 +18,25 @@ enum UserRole {
 }
 
 model User {
-  id                   Int                    @id @default(autoincrement())
-  email                String                 @unique
-  password             String
-  role                 UserRole
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  deletedAt            DateTime?
-  mustChangePassword   Boolean                @default(false)
-  student              Student?
-  teacher              Teacher?
-  issuedCertificates   CharacterCertificate[]
-  certificateTemplates CertificateTemplate[]
+  id                          Int                        @id @default(autoincrement())
+  email                       String                     @unique
+  password                    String
+  role                        UserRole
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
+  deletedAt                   DateTime?
+  mustChangePassword          Boolean                    @default(false)
+  student                     Student?
+  teacher                     Teacher?
+  issuedCertificates          CharacterCertificate[]
+  reviewedActivities          ExtracurricularActivity[]
+  reviewedStudentCertificates StudentCertificate[]
+  certificateTemplates        CertificateTemplate[]
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
 }
 
 model Student {
@@ -47,14 +54,30 @@ model Student {
   dateOfAdmission      DateTime?
   admissionGrade       String?
   attendancePercentage Float?
+  photoUrl             String?
   phoneNumber          String?
+  status               StudentStatus              @default(ACTIVE)
   classes              Class[]
+  enrollments          Enrollment[]
   termMarks            TermMark[]
   activities           ExtracurricularActivity[]
   certificates         CharacterCertificate[]
+  studentCertificates  StudentCertificate[]
   profileEditRequests  ProfileEditRequest[]
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
+  guardian             Guardian?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+}
+
+model Guardian {
+  id                    Int      @id @default(autoincrement())
+  studentId             Int      @unique
+  student               Student  @relation(fields: [studentId], references: [id])
+  guardianName          String
+  primaryPhone          String
+  emergencyContactPhone String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Teacher {
@@ -72,17 +95,26 @@ model Teacher {
   updatedAt                   DateTime                   @updatedAt
 }
 
+// Story 13.1 — structured class identity. A class is identified by the triple
+// (gradeLevel, section, year), never by free text. The human-readable `name`
+// is NOT stored: per Epic 13 AD-9 it is derived at read time by
+// `src/lib/classIdentity.ts#deriveClassName` and still appears in every API
+// response, so read-only consumers are unaffected.
 model Class {
   id                 Int                        @id @default(autoincrement())
-  name               String
-  year               Int?
+  gradeLevel         Int
+  section            String
+  year               Int
   teacherId          Int?
   teacher            Teacher?                   @relation(fields: [teacherId], references: [id])
   students           Student[]
+  enrollments        Enrollment[]
   studyMaterials     StudyMaterial[]
   subjectAssignments TeacherSubjectAssignment[]
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
+
+  @@unique([gradeLevel, section, year])
 }
 
 model Subject {
@@ -133,6 +165,39 @@ model TermMark {
   @@index([subjectId])
 }
 
+// Story 13.2 — enrollment as a time-bounded record (AD-1 Phase 1).
+// The implicit _ClassToStudent join table is kept and stays authoritative for
+// all reads; this model is written in sync by the enrol/unenrol paths, and
+// will become the sole source of truth in Story 13.8 (Phase 3).
+// AD-3: both FKs are ON DELETE RESTRICT — deleting a class or student that
+//       holds enrollment rows must fail with 409, never silently cascade.
+// AD-6: interval is half-open [enrolledAt, leftAt). leftAt IS NULL = open.
+// AD-10: status enum is fixed; no additions without human approval.
+enum EnrollmentStatus {
+  ACTIVE
+  TRANSFERRED
+  PROMOTED
+  REPEATED
+  LEFT
+}
+
+model Enrollment {
+  id          Int              @id @default(autoincrement())
+  studentId   Int
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId     Int
+  class       Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  enrolledAt  DateTime
+  leftAt      DateTime?
+  status      EnrollmentStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([studentId, classId, enrolledAt])
+  @@index([studentId])
+  @@index([classId])
+}
+
 enum ActivityStatus {
   PENDING
   APPROVED
@@ -153,6 +218,9 @@ model ExtracurricularActivity {
   evidenceUrl  String?
   status       ActivityStatus @default(PENDING)
   teacherNote  String?
+  reviewedById Int?
+  reviewedBy   User?          @relation(fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -223,6 +291,42 @@ model CharacterCertificate {
 
   @@index([studentId])
   @@index([principalId])
+}
+
+enum StudentCertificateStatus {
+  PENDING
+  APPROVED
+  NEEDS_CORRECTION
+  REJECTED
+}
+
+// A certificate the student self-reports (e.g. an external course or
+// competition certificate), distinct from CharacterCertificate above (which
+// the principal issues from within the school). Goes through the same
+// PENDING -> APPROVED/NEEDS_CORRECTION/REJECTED review workflow as
+// ExtracurricularActivity so a teacher/admin can verify it before it counts
+// as confirmed on the student's record.
+model StudentCertificate {
+  id                  Int      @id @default(autoincrement())
+  studentId           Int
+  student             Student  @relation(fields: [studentId], references: [id])
+  title               String
+  issuingOrganization String
+  issueDate           DateTime
+  category            String?
+  description         String?
+  evidenceUrl         String?
+  fileUrl             String?
+  fileType            String?
+  status              StudentCertificateStatus @default(PENDING)
+  teacherNote         String?
+  reviewedById        Int?
+  reviewedBy          User?    @relation(fields: [reviewedById], references: [id])
+  reviewedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([studentId])
 }
 
 // A saved certificate letterhead layout (Story 12.8), selectable as an
