@@ -8,8 +8,7 @@
     "dev": "tsx --watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "postinstall": "prisma generate",
-    "seed:marks": "tsx prisma/seed-marks.ts"
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
