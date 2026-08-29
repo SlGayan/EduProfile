@@ -14,6 +14,7 @@ import {
   updateMyProfileSchema,
   upsertGuardianSchema,
   createStudentSchema,
+  updateStudentSchema,
 } from '../validators/studentValidators.js';
 import {
   listActivities,
@@ -356,6 +357,7 @@ router.get('/search', searchLimiter, requireRole(['ADMINISTRATOR', 'PRINCIPAL', 
           indexNumber: true,
           fullName: true,
           dateOfBirth: true,
+          gender: true,
           olYear: true,
           alYear: true,
         },
@@ -680,6 +682,40 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
 // `verifyToken` is already applied router-wide above, so only the role guard is
 // added per route.
 // ---------------------------------------------------------------------------
+
+// Staff-side edit — currently just gender, so students on record from before
+// that field existed (or who skipped it at creation) can still get one set.
+router.patch('/:id', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequest, res) => {
+  try {
+    const studentId = parseInt(req.params.id as string, 10);
+    if (isNaN(studentId)) {
+      return res.status(400).json({ error: 'Invalid student ID' });
+    }
+
+    const parsed = updateStudentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { id: studentId, user: { deletedAt: null } },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const updated = await prisma.student.update({
+      where: { id: studentId },
+      data: { gender: parsed.data.gender },
+      select: { id: true, gender: true },
+    });
+
+    return res.status(200).json(updated);
+  } catch (err) {
+    console.error('Error updating student:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.get('/:id/activities', requireRole(['TEACHER', 'ADMINISTRATOR']), listActivities);
 
