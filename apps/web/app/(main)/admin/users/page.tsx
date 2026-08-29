@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -43,11 +44,13 @@ import { apiFetch } from "@/lib/apiFetch"
 import { TablePagination, TABLE_PAGE_SIZE } from "@/components/table-pagination"
 
 type ApiRole = "STUDENT" | "TEACHER" | "PRINCIPAL" | "ADMINISTRATOR"
+type ApiGender = "MALE" | "FEMALE" | "OTHER"
 
 interface ApiUser {
   id: number
   email: string
   role: ApiRole
+  gender: ApiGender | null
   createdAt: string
   updatedAt: string
 }
@@ -59,6 +62,7 @@ const createSchema = z.object({
     .min(6, "At least 6 characters")
     .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Must contain a letter and a number"),
   role: z.enum(["STUDENT", "TEACHER", "PRINCIPAL", "ADMINISTRATOR"] as const),
+  gender: z.enum(["MALE", "FEMALE", "OTHER"] as const).optional(),
 })
 
 const editSchema = z.object({
@@ -70,7 +74,20 @@ const editSchema = z.object({
     .optional()
     .or(z.literal("")),
   role: z.enum(["STUDENT", "TEACHER", "PRINCIPAL", "ADMINISTRATOR"] as const).optional(),
+  gender: z.enum(["MALE", "FEMALE", "OTHER"] as const).optional(),
 })
+
+const GENDER_OPTIONS: { label: string; value: ApiGender }[] = [
+  { label: "Male", value: "MALE" },
+  { label: "Female", value: "FEMALE" },
+  { label: "Other", value: "OTHER" },
+]
+
+const GENDER_LABELS: Record<ApiGender, string> = {
+  MALE: "Male",
+  FEMALE: "Female",
+  OTHER: "Other",
+}
 
 type CreateFormValues = z.infer<typeof createSchema>
 type EditFormValues = z.infer<typeof editSchema>
@@ -120,6 +137,7 @@ function UserTable({
         <TableRow>
           <TableHead>Email</TableHead>
           <TableHead>Role</TableHead>
+          <TableHead>Gender</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="w-[70px]">Actions</TableHead>
         </TableRow>
@@ -131,6 +149,7 @@ function UserTable({
             <TableCell>
               <Badge variant="outline">{user.role}</Badge>
             </TableCell>
+            <TableCell>{user.gender ? GENDER_LABELS[user.gender] : "Not set"}</TableCell>
             <TableCell>
               <Badge variant="default">Active</Badge>
             </TableCell>
@@ -165,6 +184,15 @@ function UserTable({
 }
 
 export default function UserManagementPage() {
+  return (
+    // useSearchParams requires a Suspense boundary in the App Router.
+    <Suspense fallback={null}>
+      <UserManagementPageInner />
+    </Suspense>
+  )
+}
+
+function UserManagementPageInner() {
   const queryClient = useQueryClient()
 
   const [createOpen, setCreateOpen] = useState(false)
@@ -183,8 +211,23 @@ export default function UserManagementPage() {
   // Create
   const createForm = useForm<CreateFormValues>({
     resolver: zodResolver(createSchema),
-    defaultValues: { email: "", password: "", role: "STUDENT" },
+    defaultValues: { email: "", password: "", role: "STUDENT", gender: undefined },
   })
+
+  // Deep-link support for `/admin/users?create=1` — the Admin Dashboard's
+  // "Create User" quick action lands here and should open the dialog
+  // immediately, mirroring `/admin/classes?create=1`.
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      createForm.reset()
+      setCreateOpen(true)
+    }
+    // Intentionally run only once on mount: re-running on every searchParams
+    // change would reopen the dialog if the user closes it without the URL
+    // itself changing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateFormValues) => {
@@ -210,12 +253,12 @@ export default function UserManagementPage() {
   // Edit
   const editForm = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
-    defaultValues: { email: "", password: "", role: undefined },
+    defaultValues: { email: "", password: "", role: undefined, gender: undefined },
   })
 
   const openEdit = (user: ApiUser) => {
     setEditUser(user)
-    editForm.reset({ email: user.email, password: "", role: user.role })
+    editForm.reset({ email: user.email, password: "", role: user.role, gender: user.gender ?? undefined })
   }
 
   const editMutation = useMutation({
@@ -225,6 +268,7 @@ export default function UserManagementPage() {
       if (values.email && values.email !== editUser.email) payload.email = values.email
       if (values.password) payload.password = values.password
       if (values.role && values.role !== editUser.role) payload.role = values.role
+      if (values.gender && values.gender !== editUser.gender) payload.gender = values.gender
 
       const res = await apiFetch(`/api/users/${editUser.id}`, {
         method: "PUT",
@@ -353,6 +397,24 @@ export default function UserManagementPage() {
               </Select>
               <FieldError message={createForm.formState.errors.role?.message} />
             </div>
+            <div>
+              <Label htmlFor="create-gender">Gender (optional)</Label>
+              <Select
+                onValueChange={(v) => createForm.setValue("gender", v as ApiGender)}
+              >
+                <SelectTrigger id="create-gender">
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  {GENDER_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldError message={createForm.formState.errors.gender?.message} />
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                 Cancel
@@ -405,6 +467,25 @@ export default function UserManagementPage() {
                 </SelectContent>
               </Select>
               <FieldError message={editForm.formState.errors.role?.message} />
+            </div>
+            <div>
+              <Label htmlFor="edit-gender">Gender (optional)</Label>
+              <Select
+                value={editForm.watch("gender")}
+                onValueChange={(v) => editForm.setValue("gender", v as ApiGender)}
+              >
+                <SelectTrigger id="edit-gender">
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  {GENDER_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldError message={editForm.formState.errors.gender?.message} />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditUser(null)}>

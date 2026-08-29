@@ -31,6 +31,7 @@ export const updateTeacherSelfSchema = z
     displayName: optionalText(255),
     phoneNumber: optionalPhoneNumber(),
     address: optionalText(500),
+    gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   })
   .strict()
   .refine((data) => Object.keys(data).length > 0, {

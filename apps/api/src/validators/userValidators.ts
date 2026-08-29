@@ -14,6 +14,7 @@ export const createUserSchema = z.object({
   role: z.enum(userRoles, {
     message: 'Role must be one of: STUDENT, TEACHER, PRINCIPAL, ADMINISTRATOR',
   }),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -35,6 +36,7 @@ export const updateUserSchema = z.object({
       message: 'Role must be one of: STUDENT, TEACHER, PRINCIPAL, ADMINISTRATOR',
     })
     .optional(),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;

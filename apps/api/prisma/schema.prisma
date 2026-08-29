@@ -22,6 +22,7 @@ model User {
   email                       String                     @unique
   password                    String
   role                        UserRole
+  gender                      Gender?
   createdAt                   DateTime                   @default(now())
   updatedAt                   DateTime                   @updatedAt
   deletedAt                   DateTime?
@@ -37,6 +38,12 @@ model User {
 enum StudentStatus {
   ACTIVE
   INACTIVE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
 }
 
 model Student {
@@ -56,6 +63,7 @@ model Student {
   attendancePercentage Float?
   photoUrl             String?
   phoneNumber          String?
+  gender               Gender?
   status               StudentStatus              @default(ACTIVE)
   classes              Class[]
   enrollments          Enrollment[]
@@ -87,6 +95,7 @@ model Teacher {
   displayName                 String?
   phoneNumber                 String?
   address                     String?
+  gender                      Gender?
   classes                     Class[]
   studyMaterials              StudyMaterial[]
   subjectAssignments          TeacherSubjectAssignment[]

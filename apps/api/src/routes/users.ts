@@ -25,6 +25,7 @@ router.get('/', requireRole(['ADMINISTRATOR', 'PRINCIPAL']), async (req: AuthReq
         id: true,
         email: true,
         role: true,
+        gender: true,
         createdAt: true,
         updatedAt: true,
         student: true,
@@ -54,7 +55,7 @@ router.post('/', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) =
       });
     }
 
-    const { email, password, role } = parsed.data;
+    const { email, password, role, gender } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();
 
     // Check if user already exists
@@ -76,11 +77,13 @@ router.post('/', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res) =
           email: normalizedEmail,
           password: hashedPassword,
           role,
+          ...(gender !== undefined && { gender }),
         },
         select: {
           id: true,
           email: true,
           role: true,
+          gender: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -128,7 +131,7 @@ router.put('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res)
       });
     }
 
-    const { email, password, role } = parsed.data;
+    const { email, password, role, gender } = parsed.data;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -164,6 +167,10 @@ router.put('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res)
       updateData.role = role;
     }
 
+    if (gender !== undefined) {
+      updateData.gender = gender;
+    }
+
     // Update user, creating a Teacher profile if the role is being changed to TEACHER
     const updatedUser = await prisma.$transaction(async (tx) => {
       const result = await tx.user.update({
@@ -173,6 +180,7 @@ router.put('/:id', requireRole(['ADMINISTRATOR']), async (req: AuthRequest, res)
           id: true,
           email: true,
           role: true,
+          gender: true,
           createdAt: true,
           updatedAt: true,
         },
