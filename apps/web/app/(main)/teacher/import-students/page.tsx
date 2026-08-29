@@ -21,6 +21,7 @@ const TEMPLATE_COLUMNS = [
   "dateOfBirth",
   "address",
   "nicNumber",
+  "gender",
   "olYear",
   "alYear",
 ]

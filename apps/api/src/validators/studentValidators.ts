@@ -7,6 +7,7 @@ export const EXPECTED_IMPORT_COLUMNS = [
   'dateOfBirth',
   'address',
   'nicNumber',
+  'gender',
   'olYear',
   'alYear',
 ] as const;
@@ -95,6 +96,15 @@ export const studentImportRowSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val === undefined || val === '' ? undefined : val)),
+  gender: z
+    .string()
+    .optional()
+    .transform((val) => (val === undefined || val.trim() === '' ? undefined : val.trim().toUpperCase()))
+    .refine(
+      (val) => val === undefined || ['MALE', 'FEMALE', 'OTHER'].includes(val),
+      'gender must be MALE, FEMALE, or OTHER'
+    )
+    .transform((val) => val as 'MALE' | 'FEMALE' | 'OTHER' | undefined),
   olYear: optionalInt,
   alYear: optionalInt,
 });

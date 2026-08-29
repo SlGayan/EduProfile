@@ -8,9 +8,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertCircle, Info } from "lucide-react"
 import { apiFetch } from "@/lib/apiFetch"
 import { toast } from "sonner"
+
+type GenderValue = "MALE" | "FEMALE" | "OTHER"
+
+const GENDER_LABELS: Record<GenderValue, string> = {
+  MALE: "Male",
+  FEMALE: "Female",
+  OTHER: "Other",
+}
 
 interface TeacherClass {
   id: number
@@ -23,6 +32,7 @@ interface TeacherProfile {
   displayName: string | null
   phoneNumber: string | null
   address: string | null
+  gender: GenderValue | null
   email: string
   role: string
   joinedDate: string
@@ -55,6 +65,7 @@ interface EditContactFormValues {
   displayName: string
   phoneNumber: string
   address: string
+  gender: GenderValue | ""
 }
 
 function EditContactForm({ profile }: { profile: TeacherProfile }) {
@@ -63,6 +74,7 @@ function EditContactForm({ profile }: { profile: TeacherProfile }) {
     displayName: profile.displayName ?? "",
     phoneNumber: profile.phoneNumber ?? "",
     address: profile.address ?? "",
+    gender: profile.gender ?? "",
   })
 
   // Re-sync local edits whenever the server value changes underneath us
@@ -72,15 +84,17 @@ function EditContactForm({ profile }: { profile: TeacherProfile }) {
       displayName: profile.displayName ?? "",
       phoneNumber: profile.phoneNumber ?? "",
       address: profile.address ?? "",
+      gender: profile.gender ?? "",
     })
-  }, [profile.displayName, profile.phoneNumber, profile.address])
+  }, [profile.displayName, profile.phoneNumber, profile.address, profile.gender])
 
   const mutation = useMutation({
     mutationFn: async (payload: EditContactFormValues) => {
+      const { gender, ...rest } = payload
       const response = await apiFetch("/api/teachers/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...rest, ...(gender && { gender }) }),
       })
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -131,6 +145,22 @@ function EditContactForm({ profile }: { profile: TeacherProfile }) {
               maxLength={10}
               placeholder="10 digits, e.g. 0771234567"
             />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="gender">Gender</Label>
+            <Select
+              value={values.gender}
+              onValueChange={(value) => setValues((v) => ({ ...v, gender: value as GenderValue }))}
+            >
+              <SelectTrigger id="gender" className="w-full">
+                <SelectValue placeholder="Select gender" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="MALE">Male</SelectItem>
+                <SelectItem value="FEMALE">Female</SelectItem>
+                <SelectItem value="OTHER">Other</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor="address">Address</Label>
@@ -248,6 +278,12 @@ export default function TeacherProfilePage() {
             <div className="space-y-1">
               <dt className="text-sm font-medium text-muted-foreground">Phone Number</dt>
               <dd className="text-base font-medium">{profile?.phoneNumber || "Not set"}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-sm font-medium text-muted-foreground">Gender</dt>
+              <dd className="text-base font-medium">
+                {profile?.gender ? GENDER_LABELS[profile.gender] : "Not set"}
+              </dd>
             </div>
             <div className="space-y-1 sm:col-span-2">
               <dt className="text-sm font-medium text-muted-foreground">Address</dt>
