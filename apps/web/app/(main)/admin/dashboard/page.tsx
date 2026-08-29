@@ -351,6 +351,7 @@ export default function AdminDashboardPage() {
                         style={{ backgroundColor: `var(--color-${row.key})` }}
                       />
                       <span>{row.name}</span>
+                      <span className="font-medium">{row.value}</span>
                       <span className="text-muted-foreground">
                         ({Math.round((row.value / genderTotal) * 100)}%)
                       </span>

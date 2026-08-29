@@ -131,6 +131,19 @@ export const updateMyProfileSchema = z
 
 export type UpdateMyProfileInput = z.infer<typeof updateMyProfileSchema>;
 
+// Staff-side edit (PATCH /api/students/:id, ADMINISTRATOR/TEACHER). Gender is
+// the only field exposed here: it's optional at creation/import time, so
+// students already on record before it was collected have no way to get one
+// recorded otherwise, since the self-service PATCH /me above intentionally
+// keeps identity/administrative fields staff-managed.
+export const updateStudentSchema = z
+  .object({
+    gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
+  })
+  .strict();
+
+export type UpdateStudentInput = z.infer<typeof updateStudentSchema>;
+
 export const upsertGuardianSchema = z
   .object({
     guardianName: z.string().trim().min(1, 'Guardian name is required').max(255),
