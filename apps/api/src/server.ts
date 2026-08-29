@@ -8,6 +8,7 @@ import classesRouter from './routes/classes.js';
 import studentsRouter from './routes/students.js';
 import teachersRouter from './routes/teachers.js';
 import principalsRouter from './routes/principals.js';
+import adminRouter from './routes/admin.js';
 import marksRouter from './modules/marks/marks.routes.js';
 import activitiesRouter from './modules/activities/activities.routes.js';
 import materialsRouter from './modules/materials/materials.routes.js';
@@ -67,6 +68,9 @@ app.use('/api/teachers', teachersRouter);
 
 // Principal dashboard routes
 app.use('/api/principals', principalsRouter);
+
+// Admin dashboard routes
+app.use('/api/admin', adminRouter);
 
 // Certificate routes
 app.use('/api/certificates', certificateRoutes);

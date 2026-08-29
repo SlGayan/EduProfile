@@ -28,6 +28,7 @@ router.get('/me', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
         displayName: true,
         phoneNumber: true,
         address: true,
+        gender: true,
         createdAt: true,
         user: { select: { email: true, role: true } },
         classes: { select: { id: true, gradeLevel: true, section: true } },
@@ -44,6 +45,7 @@ router.get('/me', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
       displayName: teacher.displayName,
       phoneNumber: teacher.phoneNumber,
       address: teacher.address,
+      gender: teacher.gender,
       email: teacher.user.email,
       role: teacher.user.role,
       joinedDate: teacher.createdAt,
@@ -70,7 +72,7 @@ router.patch('/me', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
     }
-    const { displayName, phoneNumber, address } = parsed.data;
+    const { displayName, phoneNumber, address, gender } = parsed.data;
 
     const updated = await prisma.teacher.update({
       where: { id: teacher.id },
@@ -78,6 +80,7 @@ router.patch('/me', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
         ...(displayName !== undefined && { displayName }),
         ...(phoneNumber !== undefined && { phoneNumber }),
         ...(address !== undefined && { address }),
+        ...(gender !== undefined && { gender }),
       },
     });
 
@@ -86,6 +89,7 @@ router.patch('/me', requireRole(['TEACHER']), async (req: AuthRequest, res) => {
       displayName: updated.displayName,
       phoneNumber: updated.phoneNumber,
       address: updated.address,
+      gender: updated.gender,
     });
   } catch (err) {
     console.error('Error updating teacher profile:', err);

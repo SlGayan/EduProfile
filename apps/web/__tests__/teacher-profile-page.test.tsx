@@ -44,6 +44,7 @@ interface TeacherProfileFixture {
   displayName: string | null
   phoneNumber: string | null
   address: string | null
+  gender: "MALE" | "FEMALE" | "OTHER" | null
   email: string
   role: string
   joinedDate: string
@@ -56,6 +57,7 @@ const BASE_PROFILE: TeacherProfileFixture = {
   displayName: null,
   phoneNumber: null,
   address: null,
+  gender: null,
   email: "teacher@edu.com",
   role: "TEACHER",
   joinedDate: "2026-01-01T00:00:00.000Z",
@@ -98,7 +100,7 @@ describe("TeacherProfilePage — read-only Staff Information", () => {
     renderPage()
 
     expect(await screen.findByText("TCH-0001")).toBeInTheDocument()
-    expect(screen.getAllByText("Not set")).toHaveLength(3) // Display Name, Phone Number, Address
+    expect(screen.getAllByText("Not set")).toHaveLength(4) // Display Name, Phone Number, Gender, Address
   })
 
   it("pre-fills the edit form with the currently saved values", async () => {

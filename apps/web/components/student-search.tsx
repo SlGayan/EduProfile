@@ -11,7 +11,16 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Search, RotateCcw, ArrowUpDown, AlertCircle } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Search, RotateCcw, ArrowUpDown, AlertCircle, Loader2 } from "lucide-react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import { apiFetch } from "@/lib/apiFetch"
 import { getCurrentUser } from "@/lib/auth"
 import { sortStudents, formatDate, type SortField, type SortOrder } from "@/lib/studentSearch"
@@ -28,11 +37,20 @@ interface SearchFilters {
   alYear: string
 }
 
+type Gender = "MALE" | "FEMALE" | "OTHER"
+
+const GENDER_LABELS: Record<Gender, string> = {
+  MALE: "Male",
+  FEMALE: "Female",
+  OTHER: "Other",
+}
+
 interface Student {
   id: number
   indexNumber: string
   fullName: string
   dateOfBirth: string
+  gender: Gender | null
   olYear: number | null
   alYear: number | null
 }
@@ -77,12 +95,66 @@ async function fetchStudentSearch(queryParams: string): Promise<StudentSearchRes
   return data
 }
 
+function GenderCell({ student, canEdit }: { student: Student; canEdit: boolean }) {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: async (gender: Gender) => {
+      const response = await apiFetch(`/api/students/${student.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gender }),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data?.error || "Failed to update gender")
+      }
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["students"] })
+      toast.success(`Gender updated for ${student.fullName}`)
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  if (!canEdit) {
+    return <span>{student.gender ? GENDER_LABELS[student.gender] : "Not set"}</span>
+  }
+
+  return (
+    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+      <Select
+        value={student.gender ?? undefined}
+        onValueChange={(value) => mutation.mutate(value as Gender)}
+        disabled={mutation.isPending}
+      >
+        <SelectTrigger className="h-8 w-28">
+          <SelectValue placeholder="Not set" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="MALE">Male</SelectItem>
+          <SelectItem value="FEMALE">Female</SelectItem>
+          <SelectItem value="OTHER">Other</SelectItem>
+        </SelectContent>
+      </Select>
+      {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+    </div>
+  )
+}
+
 export default function StudentSearch({ onSelectStudent }: StudentSearchProps = {}) {
   const router = useRouter()
 
   // Role guard — only ADMINISTRATOR, PRINCIPAL, or TEACHER (stored lowercase in auth)
   const user = getCurrentUser()
   const isAuthorized = !user || user.role === "admin" || user.role === "principal" || user.role === "teacher"
+
+  // Gender is staff-editable here (PATCH /api/students/:id) so students who
+  // predate the field, or skipped it at creation, can still get one recorded.
+  // Excluded when onSelectStudent is set (e.g. Principal's issue-certificate
+  // picker) since that flow selects a student rather than managing records.
+  const canEditGender = !onSelectStudent && (user?.role === "admin" || user?.role === "teacher")
 
   useEffect(() => {
     if (!isAuthorized) {
@@ -308,6 +380,7 @@ export default function StudentSearch({ onSelectStudent }: StudentSearchProps = 
                       <ArrowUpDown className={sortIconClassName("dateOfBirth")} />
                     </Button>
                   </TableHead>
+                  <TableHead>Gender</TableHead>
                   <TableHead>
                     <Button variant="ghost" onClick={() => handleSort("olYear")} className={sortHeaderClassName("olYear")}>
                       O/L Year
@@ -332,6 +405,9 @@ export default function StudentSearch({ onSelectStudent }: StudentSearchProps = 
                     <TableCell className="font-medium">{student.indexNumber}</TableCell>
                     <TableCell>{student.fullName}</TableCell>
                     <TableCell>{formatDate(student.dateOfBirth)}</TableCell>
+                    <TableCell>
+                      <GenderCell student={student} canEdit={canEditGender} />
+                    </TableCell>
                     <TableCell>{student.olYear ?? "N/A"}</TableCell>
                     <TableCell>{student.alYear ?? "N/A"}</TableCell>
                   </TableRow>

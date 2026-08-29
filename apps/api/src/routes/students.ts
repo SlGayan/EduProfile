@@ -14,6 +14,7 @@ import {
   updateMyProfileSchema,
   upsertGuardianSchema,
   createStudentSchema,
+  updateStudentSchema,
 } from '../validators/studentValidators.js';
 import {
   listActivities,
@@ -115,6 +116,7 @@ router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
       address: student.address,
       phoneNumber: student.phoneNumber,
       nicNumber: student.nicNumber,
+      gender: student.gender,
       olYear: student.olYear,
       alYear: student.alYear,
       email: student.user.email,
@@ -355,6 +357,7 @@ router.get('/search', searchLimiter, requireRole(['ADMINISTRATOR', 'PRINCIPAL', 
           indexNumber: true,
           fullName: true,
           dateOfBirth: true,
+          gender: true,
           olYear: true,
           alYear: true,
         },
@@ -480,6 +483,7 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
                 dateOfBirth: new Date(data.dateOfBirth),
                 address: data.address,
                 nicNumber: data.nicNumber ?? null,
+                gender: data.gender ?? null,
                 olYear: data.olYear ?? null,
                 alYear: data.alYear ?? null,
                 ...(autoEnrollClassId !== null && { classes: { connect: { id: autoEnrollClassId } } }),
@@ -514,6 +518,7 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
                 dateOfBirth: new Date(data.dateOfBirth),
                 address: data.address,
                 nicNumber: data.nicNumber ?? null,
+                gender: data.gender ?? null,
                 olYear: data.olYear ?? null,
                 alYear: data.alYear ?? null,
                 ...(autoEnrollClassId !== null && { classes: { connect: { id: autoEnrollClassId } } }),
@@ -565,7 +570,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
     }
-    const { email, fullName, indexNumber, dateOfBirth, address, nicNumber, olYear, alYear, classId } =
+    const { email, fullName, indexNumber, dateOfBirth, address, nicNumber, gender, olYear, alYear, classId } =
       parsed.data;
 
     // The JWT's role is lowercase and frontend-normalized (see
@@ -615,6 +620,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
           dateOfBirth: new Date(dateOfBirth),
           address,
           nicNumber: nicNumber ?? null,
+          gender: gender ?? null,
           olYear: olYear ?? null,
           alYear: alYear ?? null,
           ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),
@@ -640,6 +646,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
           dateOfBirth: new Date(dateOfBirth),
           address,
           nicNumber: nicNumber ?? null,
+          gender: gender ?? null,
           olYear: olYear ?? null,
           alYear: alYear ?? null,
           ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),
@@ -675,6 +682,40 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
 // `verifyToken` is already applied router-wide above, so only the role guard is
 // added per route.
 // ---------------------------------------------------------------------------
+
+// Staff-side edit — currently just gender, so students on record from before
+// that field existed (or who skipped it at creation) can still get one set.
+router.patch('/:id', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequest, res) => {
+  try {
+    const studentId = parseInt(req.params.id as string, 10);
+    if (isNaN(studentId)) {
+      return res.status(400).json({ error: 'Invalid student ID' });
+    }
+
+    const parsed = updateStudentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { id: studentId, user: { deletedAt: null } },
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const updated = await prisma.student.update({
+      where: { id: studentId },
+      data: { gender: parsed.data.gender },
+      select: { id: true, gender: true },
+    });
+
+    return res.status(200).json(updated);
+  } catch (err) {
+    console.error('Error updating student:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.get('/:id/activities', requireRole(['TEACHER', 'ADMINISTRATOR']), listActivities);
 

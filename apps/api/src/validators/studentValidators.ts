@@ -7,6 +7,7 @@ export const EXPECTED_IMPORT_COLUMNS = [
   'dateOfBirth',
   'address',
   'nicNumber',
+  'gender',
   'olYear',
   'alYear',
 ] as const;
@@ -95,6 +96,15 @@ export const studentImportRowSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val === undefined || val === '' ? undefined : val)),
+  gender: z
+    .string()
+    .optional()
+    .transform((val) => (val === undefined || val.trim() === '' ? undefined : val.trim().toUpperCase()))
+    .refine(
+      (val) => val === undefined || ['MALE', 'FEMALE', 'OTHER'].includes(val),
+      'gender must be MALE, FEMALE, or OTHER'
+    )
+    .transform((val) => val as 'MALE' | 'FEMALE' | 'OTHER' | undefined),
   olYear: optionalInt,
   alYear: optionalInt,
 });
@@ -120,6 +130,19 @@ export const updateMyProfileSchema = z
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update' });
 
 export type UpdateMyProfileInput = z.infer<typeof updateMyProfileSchema>;
+
+// Staff-side edit (PATCH /api/students/:id, ADMINISTRATOR/TEACHER). Gender is
+// the only field exposed here: it's optional at creation/import time, so
+// students already on record before it was collected have no way to get one
+// recorded otherwise, since the self-service PATCH /me above intentionally
+// keeps identity/administrative fields staff-managed.
+export const updateStudentSchema = z
+  .object({
+    gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
+  })
+  .strict();
+
+export type UpdateStudentInput = z.infer<typeof updateStudentSchema>;
 
 export const upsertGuardianSchema = z
   .object({
@@ -156,6 +179,7 @@ export const createStudentSchema = z.object({
     .trim()
     .optional()
     .transform((val) => (val === undefined || val === '' ? undefined : val)),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   olYear: z.coerce.number().int().min(1900).max(2100).optional(),
   alYear: z.coerce.number().int().min(1900).max(2100).optional(),
   classId: z.coerce.number().int().positive().optional(),

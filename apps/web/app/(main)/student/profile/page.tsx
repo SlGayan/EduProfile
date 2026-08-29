@@ -42,12 +42,21 @@ import { toast } from "sonner"
 import { apiFetch } from "@/lib/apiFetch"
 import { getCurrentUser } from "@/lib/auth"
 
+type GenderValue = "MALE" | "FEMALE" | "OTHER"
+
+const GENDER_LABELS: Record<GenderValue, string> = {
+  MALE: "Male",
+  FEMALE: "Female",
+  OTHER: "Other",
+}
+
 interface StudentProfile {
   id: number
   fullName: string
   indexNumber: string
   dateOfBirth: string
   nicNumber: string | null
+  gender: GenderValue | null
   address: string
   phoneNumber: string | null
   olYear: number | null
@@ -681,6 +690,12 @@ export default function StudentProfilePage() {
               <div className="space-y-1">
                 <dt className="text-sm font-medium text-muted-foreground">NIC Number</dt>
                 <NicField nic={profile.nicNumber} />
+              </div>
+              <div className="space-y-1">
+                <dt className="text-sm font-medium text-muted-foreground">Gender</dt>
+                <dd className="text-base font-medium">
+                  {profile.gender ? GENDER_LABELS[profile.gender] : "N/A"}
+                </dd>
               </div>
               <div className="space-y-1">
                 <dt className="text-sm font-medium text-muted-foreground">Email Address</dt>

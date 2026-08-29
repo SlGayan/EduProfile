@@ -70,7 +70,7 @@ export default function LoginPage() {
       if (user.role === "teacher") router.push("/teacher/dashboard")
       else if (user.role === "principal") router.push("/principal/dashboard")
       else if (user.role === "student") router.push("/student/profile")
-      else router.push("/admin/users")
+      else router.push("/admin/dashboard")
     } catch (err: unknown) {
       const e = err as Error
       toast({ title: "Login failed", description: e?.message || "Network error" })
