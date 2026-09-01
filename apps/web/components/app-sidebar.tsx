@@ -46,7 +46,7 @@ const teacherNavItems = [
 
 const principalNavItems = [
   { href: "/principal/dashboard", label: "Dashboard", icon: Home },
-  { href: "/admin/classes", label: "Class Management", icon: School },
+  { href: "/principal/classes", label: "Class Management", icon: School },
   { href: "/principal/search-students", label: "Search Students", icon: Search },
   { href: "/principal/certificates", label: "Certificates", icon: FileText },
   { href: "/admin/certificate-templates", label: "Certificate Templates", icon: LayoutTemplate },

@@ -208,7 +208,7 @@ describe("PrincipalDashboardPage — Quick Actions", () => {
     )
     expect(screen.getByRole("link", { name: /Create Class/ })).toHaveAttribute(
       "href",
-      "/admin/classes?create=1",
+      "/principal/classes?create=1",
     )
     expect(screen.getByRole("link", { name: /Issue New Certificate/ })).toHaveAttribute(
       "href",
