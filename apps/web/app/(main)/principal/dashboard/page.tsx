@@ -148,7 +148,7 @@ export default function PrincipalDashboardPage() {
     {
       label: "Create Class",
       description: "Add a new grade & section",
-      href: "/admin/classes?create=1",
+      href: "/principal/classes?create=1",
       icon: School,
       iconClassName: "bg-emerald-50 text-emerald-600",
     },
