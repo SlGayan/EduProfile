@@ -176,7 +176,7 @@ router.delete('/:id', async (req: AuthRequest, res) => {
         return res.status(200).json({ message: 'Class successfully deleted' });
     } catch (err) {
         if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2003') {
-            return res.status(409).json({ error: 'Cannot delete class with active subject-teaching assignments' });
+            return res.status(409).json({ error: 'Cannot delete class with existing student enrollments or subject-teaching assignments' });
         }
         console.error('Error deleting class:', err);
         return res.status(500).json({ error: 'Failed to delete class' });
@@ -250,6 +250,11 @@ router.post('/:id/students', async (req: AuthRequest, res) => {
         // Date.UTC is used so the stored value is midnight UTC, matching the
         // make_date output in the backfill migration (PostgreSQL TIMESTAMP
         // without timezone, treated as UTC by Prisma).
+        // Upsert (not create): enrolledAt is deterministic per (student, class,
+        // year), so a re-enrolment after a prior unenrol in the same year would
+        // otherwise collide with @@unique([studentId, classId, enrolledAt]) and
+        // throw. Reopening the existing row is also correct AD-10 semantics —
+        // it's the same class-year membership, not a new one.
         const enrolledAt = new Date(Date.UTC(existing.year, 0, 1)); // Jan 1 UTC
         const updatedClass = await prisma.$transaction(async (tx) => {
             const cls = await tx.class.update({
@@ -261,8 +266,10 @@ router.post('/:id/students', async (req: AuthRequest, res) => {
                 },
                 include: { students: true }
             });
-            await tx.enrollment.create({
-                data: { studentId, classId: id, enrolledAt, status: 'ACTIVE' }
+            await tx.enrollment.upsert({
+                where: { studentId_classId_enrolledAt: { studentId, classId: id, enrolledAt } },
+                update: { status: 'ACTIVE', leftAt: null },
+                create: { studentId, classId: id, enrolledAt, status: 'ACTIVE' }
             });
             return cls;
         });
@@ -280,8 +287,14 @@ router.delete('/:id/students/:studentId', async (req: AuthRequest, res) => {
         const studentId = parseInt(req.params.studentId as string, 10);
         if (isNaN(id) || isNaN(studentId)) return res.status(400).json({ error: 'Invalid ID' });
 
-        const existing = await prisma.class.findUnique({ where: { id } });
+        const existing = await prisma.class.findUnique({
+            where: { id },
+            include: { students: { where: { id: studentId }, select: { id: true } } }
+        });
         if (!existing) return res.status(404).json({ error: 'Class not found' });
+        if (existing.students.length === 0) {
+            return res.status(404).json({ error: 'Student is not enrolled in this class' });
+        }
 
         // Story 13.2 (AD-1 Phase 1 / AD-3): close the open Enrollment row rather
         // than deleting it. Both writes run in a transaction so the implicit

@@ -260,6 +260,77 @@ describe('Structured class identity (Story 13.1)', () => {
       const count = await prisma.enrollment.count({ where: { studentId, classId: lifecycleClassId } });
       expect(count).toBeGreaterThanOrEqual(1);
     });
+
+    it('reopens the same Enrollment row when re-enrolled after leaving (no duplicate, no 500)', async () => {
+      const before = await prisma.enrollment.findFirstOrThrow({
+        where: { studentId, classId: lifecycleClassId },
+      });
+      expect(before.status).toBe('LEFT');
+
+      const res = await request(app)
+        .post(`/api/classes/${lifecycleClassId}/students`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ studentId });
+      expect(res.status).toBe(200);
+
+      const rows = await prisma.enrollment.findMany({ where: { studentId, classId: lifecycleClassId } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).toBe(before.id);
+      expect(rows[0]!.status).toBe('ACTIVE');
+      expect(rows[0]!.leftAt).toBeNull();
+    });
+
+    it('returns 404 when unenrolling a student who is not currently in the class', async () => {
+      // studentId is ACTIVE in lifecycleClassId from the previous test — unenrol once (succeeds).
+      const first = await request(app)
+        .delete(`/api/classes/${lifecycleClassId}/students/${studentId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(first.status).toBe(200);
+
+      // Unenrolling again — the student is no longer in the class.
+      const second = await request(app)
+        .delete(`/api/classes/${lifecycleClassId}/students/${studentId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(second.status).toBe(404);
+      expect(second.body.error).toBe('Student is not enrolled in this class');
+    });
+
+    it('unenrols gracefully (200) when the implicit relation shows membership but no Enrollment row exists', async () => {
+      const orphan = await createClass({ gradeLevel: GRADE, section: 'LifecycleOrphan', year: YEAR });
+      expect(orphan.status).toBe(201);
+      const orphanClassId = orphan.body.class.id as number;
+      createdClassIds.push(orphanClassId);
+
+      // Connect directly via Prisma, bypassing the route, so no Enrollment row exists.
+      await prisma.class.update({
+        where: { id: orphanClassId },
+        data: { students: { connect: { id: studentId } } },
+      });
+      expect(await prisma.enrollment.count({ where: { studentId, classId: orphanClassId } })).toBe(0);
+
+      const res = await request(app)
+        .delete(`/api/classes/${orphanClassId}/students/${studentId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+    });
+
+    it('returns 409 when deleting a class that has an Enrollment row', async () => {
+      const withEnrollment = await createClass({ gradeLevel: GRADE, section: 'LifecycleDeleteBlock', year: YEAR });
+      expect(withEnrollment.status).toBe(201);
+      const blockedClassId = withEnrollment.body.class.id as number;
+      createdClassIds.push(blockedClassId);
+
+      const enrol = await request(app)
+        .post(`/api/classes/${blockedClassId}/students`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ studentId });
+      expect(enrol.status).toBe(200);
+
+      const del = await request(app)
+        .delete(`/api/classes/${blockedClassId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(del.status).toBe(409);
+    });
   });
 });
 

@@ -86,6 +86,26 @@ function escapeLikeWildcards(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
 }
 
+// Story 13.2 — keep Enrollment in sync with the implicit relation for every
+// path that connects a student to a class, not just classes.ts's dedicated
+// enrol route (this file's `/import` and `/` auto-enrol a student too).
+// enrolledAt = Jan 1 of the class year (AD-10); upsert so re-enrolling here
+// after a prior unenrol reopens the same row instead of colliding with
+// @@unique([studentId, classId, enrolledAt]).
+async function syncEnrollment(
+  tx: Prisma.TransactionClient,
+  studentId: number,
+  classId: number,
+  classYear: number
+) {
+  const enrolledAt = new Date(Date.UTC(classYear, 0, 1));
+  await tx.enrollment.upsert({
+    where: { studentId_classId_enrolledAt: { studentId, classId, enrolledAt } },
+    update: { status: 'ACTIVE', leftAt: null },
+    create: { studentId, classId, enrolledAt, status: 'ACTIVE' },
+  });
+}
+
 router.use(verifyToken);
 
 router.get('/me', requireRole(['STUDENT']), async (req: AuthRequest, res) => {
@@ -448,6 +468,7 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
     // behavior, and an ambiguous multi-class teacher is left for an explicit
     // admin assignment rather than guessing which class was meant.
     let autoEnrollClassId: number | null = null;
+    let autoEnrollClassYear: number | null = null;
     if (req.user!.role === 'teacher') {
       const teacher = await prisma.teacher.findUnique({
         where: { userId: req.user!.id, user: { deletedAt: null } },
@@ -455,6 +476,7 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
       });
       if (teacher && teacher.classes.length === 1) {
         autoEnrollClassId = teacher.classes[0]!.id;
+        autoEnrollClassYear = teacher.classes[0]!.year;
       }
     }
 
@@ -476,7 +498,7 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
           });
 
           if (existingStudent) {
-            await tx.student.update({
+            const updatedStudent = await tx.student.update({
               where: { id: existingStudent.id },
               data: {
                 fullName: data.fullName,
@@ -489,6 +511,9 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
                 ...(autoEnrollClassId !== null && { classes: { connect: { id: autoEnrollClassId } } }),
               },
             });
+            if (autoEnrollClassId !== null && autoEnrollClassYear !== null) {
+              await syncEnrollment(tx, updatedStudent.id, autoEnrollClassId, autoEnrollClassYear);
+            }
             updatedCount++;
             importedStudents.push({
               indexNumber: data.indexNumber,
@@ -510,7 +535,7 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
               },
             });
 
-            await tx.student.create({
+            const createdStudent = await tx.student.create({
               data: {
                 userId: user.id,
                 fullName: data.fullName,
@@ -524,6 +549,9 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
                 ...(autoEnrollClassId !== null && { classes: { connect: { id: autoEnrollClassId } } }),
               },
             });
+            if (autoEnrollClassId !== null && autoEnrollClassYear !== null) {
+              await syncEnrollment(tx, createdStudent.id, autoEnrollClassId, autoEnrollClassYear);
+            }
             createdCount++;
             importedStudents.push({
               indexNumber: data.indexNumber,
@@ -576,6 +604,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
     // The JWT's role is lowercase and frontend-normalized (see
     // activities.controller.ts) — 'admin', not 'ADMINISTRATOR'.
     let targetClassId: number | null = null;
+    let targetClassYear: number | null = null;
 
     if (req.user!.role === 'teacher') {
       const teacher = await prisma.teacher.findUnique({
@@ -602,29 +631,37 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
           classes: teacher.classes.map((c) => ({ id: c.id, name: deriveClassName(c) })),
         });
       }
+      targetClassYear = teacher.classes.find((c) => c.id === targetClassId)!.year;
     } else if (classId !== undefined) {
       const targetClass = await prisma.class.findUnique({ where: { id: classId } });
       if (!targetClass) {
         return res.status(404).json({ error: 'Class not found' });
       }
       targetClassId = classId;
+      targetClassYear = targetClass.year;
     }
 
     const existingStudent = await prisma.student.findUnique({ where: { indexNumber } });
 
     if (existingStudent) {
-      const updated = await prisma.student.update({
-        where: { id: existingStudent.id },
-        data: {
-          fullName,
-          dateOfBirth: new Date(dateOfBirth),
-          address,
-          nicNumber: nicNumber ?? null,
-          gender: gender ?? null,
-          olYear: olYear ?? null,
-          alYear: alYear ?? null,
-          ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),
-        },
+      const updated = await prisma.$transaction(async (tx) => {
+        const s = await tx.student.update({
+          where: { id: existingStudent.id },
+          data: {
+            fullName,
+            dateOfBirth: new Date(dateOfBirth),
+            address,
+            nicNumber: nicNumber ?? null,
+            gender: gender ?? null,
+            olYear: olYear ?? null,
+            alYear: alYear ?? null,
+            ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),
+          },
+        });
+        if (targetClassId !== null && targetClassYear !== null) {
+          await syncEnrollment(tx, s.id, targetClassId, targetClassYear);
+        }
+        return s;
       });
       return res.status(200).json({ message: 'Student updated', id: updated.id, indexNumber: updated.indexNumber });
     }
@@ -638,7 +675,7 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
       const user = await tx.user.create({
         data: { email, password: hashedPassword, role: 'STUDENT', mustChangePassword: true },
       });
-      return tx.student.create({
+      const s = await tx.student.create({
         data: {
           userId: user.id,
           fullName,
@@ -652,6 +689,10 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
           ...(targetClassId !== null && { classes: { connect: { id: targetClassId } } }),
         },
       });
+      if (targetClassId !== null && targetClassYear !== null) {
+        await syncEnrollment(tx, s.id, targetClassId, targetClassYear);
+      }
+      return s;
     });
 
     return res.status(201).json({ message: 'Student created', id: student.id, indexNumber: student.indexNumber });

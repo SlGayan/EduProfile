@@ -196,7 +196,7 @@ describe('Teacher subject assignment endpoints', () => {
       .delete(`/api/classes/${classWithAssignment.id}`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(409);
-    expect(res.body).toEqual({ error: 'Cannot delete class with active subject-teaching assignments' });
+    expect(res.body).toEqual({ error: 'Cannot delete class with existing student enrollments or subject-teaching assignments' });
 
     // Cleanup: remove the blocking assignment first, then the class.
     await prisma.teacherSubjectAssignment.deleteMany({ where: { classId: classWithAssignment.id } });
