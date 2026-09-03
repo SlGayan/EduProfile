@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { AlertCircle, Download, Loader2, ScrollText } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/apiFetch"
+import { encodeCertificateId } from "@/lib/certificates"
 
 interface Certificate {
   id: string
@@ -40,7 +41,7 @@ async function fetchMyCertificates(): Promise<Certificate[]> {
 async function downloadCertificate(certificate: Certificate) {
   let res: Response
   try {
-    res = await apiFetch(`/api/students/me/certificates/${encodeURIComponent(certificate.id)}/pdf`)
+    res = await apiFetch(`/api/students/me/certificates/${encodeCertificateId(certificate.id)}/pdf`)
   } catch {
     toast.error("Failed to download certificate")
     return

@@ -8,6 +8,18 @@
 import { apiFetch } from "@/lib/apiFetch"
 
 /**
+ * The certificate id (e.g. "DSCTH/CC/2026/0007") is also its primary key, so
+ * it can't travel as a raw URL path segment — an escaped slash (%2F) isn't
+ * reliably preserved through every proxy layer in front of the API, which is
+ * why `/api/certificates/:id/pdf` 404s for every certificate. base64url has
+ * no `/` or `%` in its alphabet, so it survives intact; the API decodes it
+ * back in `findCertificateByIdParam`.
+ */
+export function encodeCertificateId(id: string): string {
+  return btoa(id).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+}
+
+/**
  * Count of active students who have at least one approved activity or
  * approved self-added certificate but have never had a character
  * certificate issued — the principal dashboard's "ready to issue" scorecard.

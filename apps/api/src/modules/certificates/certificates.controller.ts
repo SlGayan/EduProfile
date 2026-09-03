@@ -119,8 +119,16 @@ export const issueCertificate = async (req: AuthRequest, res: Response) => {
  * principal-facing and student-facing PDF routes so ownership checks can be
  * layered on by each caller before streaming the PDF.
  */
+/**
+ * The certificate reference number (e.g. `DSCTH/CC/2026/0007`) is also its
+ * primary key, so it can't travel as a raw URL path segment — an escaped
+ * slash (`%2F`) is not reliably preserved end-to-end through every proxy
+ * layer in front of this API. Callers must base64url-encode the id before
+ * putting it in the URL (see `encodeCertificateId` in apps/web/lib/certificates.ts);
+ * this decodes it back.
+ */
 export async function findCertificateByIdParam(rawId: string) {
-  const decodedId = decodeURIComponent(rawId);
+  const decodedId = Buffer.from(rawId, 'base64url').toString('utf8');
   return prisma.characterCertificate.findUnique({ where: { id: decodedId } });
 }
 

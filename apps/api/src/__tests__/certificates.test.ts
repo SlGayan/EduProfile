@@ -73,14 +73,18 @@ describe('Character certificate endpoints', () => {
 
   it('requires authentication to download a certificate PDF', async () => {
     const cert = await prisma.characterCertificate.findFirst({ where: { studentId } });
-    const res = await request(app).get(`/api/certificates/${encodeURIComponent(cert!.id)}/pdf`);
+    const encodedId = Buffer.from(cert!.id, 'utf8').toString('base64url');
+    const res = await request(app).get(`/api/certificates/${encodedId}/pdf`);
     expect(res.status).toBe(401);
   });
 
   it('lets a Principal download an issued certificate PDF', async () => {
     const cert = await prisma.characterCertificate.findFirst({ where: { studentId } });
+    // The certificate id itself contains slashes (DSCTH/CC/YYYY/NNNN), so it
+    // travels as base64url, not a raw/percent-encoded path segment.
+    const encodedId = Buffer.from(cert!.id, 'utf8').toString('base64url');
     const res = await request(app)
-      .get(`/api/certificates/${encodeURIComponent(cert!.id)}/pdf`)
+      .get(`/api/certificates/${encodedId}/pdf`)
       .set('Authorization', `Bearer ${principalToken}`);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/pdf');
