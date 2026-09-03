@@ -10,6 +10,29 @@ async function login(email: string, password = 'password123') {
   return res.body.token as string;
 }
 
+/**
+ * The PDF download routes now redirect to blob storage (302 + Location)
+ * instead of streaming the PDF directly, so tests follow that redirect
+ * themselves. materials.blob's dev fallback (used when Azure isn't
+ * reachable, e.g. in CI with no AZURE_STORAGE_* configured) hands back a
+ * same-origin `/api/materials/local-blob/...` path; a working Azure
+ * connection instead hands back a real, absolute SAS URL. Handle both.
+ */
+async function downloadCertificatePdf(encodedId: string, token: string) {
+  const redirectRes = await request(app)
+    .get(`/api/certificates/${encodedId}/pdf`)
+    .set('Authorization', `Bearer ${token}`);
+  expect(redirectRes.status).toBe(302);
+  const location = redirectRes.headers.location as string;
+  expect(location).toBeTruthy();
+
+  if (/^https?:\/\//.test(location)) {
+    const res = await fetch(location);
+    return { status: res.status, headers: { 'content-type': res.headers.get('content-type') ?? '' } };
+  }
+  return request(app).get(location).set('Authorization', `Bearer ${token}`);
+}
+
 describe('Character certificate endpoints', () => {
   let principalToken: string;
   let teacherToken: string;
@@ -87,9 +110,7 @@ describe('Character certificate endpoints', () => {
     // The certificate id itself contains slashes (DSCTH/CC/YYYY/NNNN), so it
     // travels as base64url, not a raw/percent-encoded path segment.
     const encodedId = Buffer.from(cert!.id, 'utf8').toString('base64url');
-    const res = await request(app)
-      .get(`/api/certificates/${encodedId}/pdf`)
-      .set('Authorization', `Bearer ${principalToken}`);
+    const res = await downloadCertificatePdf(encodedId, principalToken);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/pdf');
   });
@@ -137,9 +158,7 @@ describe('Character certificate endpoints', () => {
     expect(issueRes.body.templateId).toBe(templateId);
 
     const encodedId = Buffer.from(issueRes.body.id, 'utf8').toString('base64url');
-    const pdfRes = await request(app)
-      .get(`/api/certificates/${encodedId}/pdf`)
-      .set('Authorization', `Bearer ${principalToken}`);
+    const pdfRes = await downloadCertificatePdf(encodedId, principalToken);
     expect(pdfRes.status).toBe(200);
     expect(pdfRes.headers['content-type']).toContain('application/pdf');
   });

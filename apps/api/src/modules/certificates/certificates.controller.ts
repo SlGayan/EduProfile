@@ -6,6 +6,7 @@ import { AuthRequest } from '../../middleware/authMiddleware.js';
 import PDFDocument from 'pdfkit';
 import { issueCertificateSchema } from '../../validators/certificateValidators.js';
 import { templateLayoutDataSchema, type TemplateLayoutData, type TemplateField } from '../../validators/certificateTemplateValidators.js';
+import { uploadBlob, getDownloadSasUrl } from '../materials/materials.blob.js';
 
 const prisma = new PrismaClient();
 
@@ -67,11 +68,12 @@ export const issueCertificate = async (req: AuthRequest, res: Response) => {
 
     const principalId = req.user!.id;
 
-    if (templateId != null) {
-      const template = await prisma.certificateTemplate.findUnique({ where: { id: templateId } });
-      if (!template) {
-        return res.status(404).json({ error: 'Certificate template not found' });
-      }
+    const template =
+      templateId != null
+        ? await prisma.certificateTemplate.findUnique({ where: { id: templateId } })
+        : null;
+    if (templateId != null && !template) {
+      return res.status(404).json({ error: 'Certificate template not found' });
     }
 
     const student = await prisma.student.findUnique({
@@ -117,6 +119,16 @@ export const issueCertificate = async (req: AuthRequest, res: Response) => {
       ...(templateId != null ? { template: { connect: { id: templateId } } } : {}),
     });
 
+    // Best-effort: render and upload now so the download route is
+    // instant-serving from blob storage. If this fails (transient blob
+    // storage issue), issuance still succeeds — the download route lazily
+    // renders and uploads on first access instead.
+    try {
+      await ensureCertificatePdfBlob({ ...certificate, template });
+    } catch (blobError) {
+      console.error(`Failed to pre-render/upload PDF for certificate ${certificate.id}:`, blobError);
+    }
+
     return res.status(201).json(certificate);
   } catch (error) {
     console.error('Error issuing certificate:', error);
@@ -150,26 +162,41 @@ type CharacterCertificateRecord = NonNullable<
 >;
 
 /**
- * Streams the certificate PDF onto `res`. Extracted from getCertificatePdf so
- * the student-facing "download my own certificate" route (students.ts) can
- * reuse the exact same rendering after its own ownership check, instead of
- * duplicating this ~100-line PDFKit layout.
+ * Runs `build` against a fresh PDFKit document and resolves with the
+ * complete rendered file as a Buffer, instead of piping straight to an HTTP
+ * response — the PDF is generated once (at issuance, or lazily on first
+ * download) and uploaded to blob storage rather than regenerated on every
+ * download.
  */
-export function streamCertificatePdf(certificate: CharacterCertificateRecord, res: Response) {
-  try {
-    const decodedId = certificate.id;
-    const snapshot = certificate.contentSnapshot as any;
+function collectPdfBuffer(
+  build: (doc: PDFKit.PDFDocument) => void,
+  options?: PDFKit.PDFDocumentOptions
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument(options);
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    try {
+      build(doc);
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
-    const doc = new PDFDocument({ margin: 50 });
+/**
+ * Renders the default fixed-layout certificate PDF. Extracted from
+ * getCertificatePdf so the student-facing "download my own certificate"
+ * route (students.ts) can reuse the exact same rendering after its own
+ * ownership check, instead of duplicating this ~100-line PDFKit layout.
+ */
+function buildDefaultCertificatePdf(certificate: CharacterCertificateRecord): Promise<Buffer> {
+  const snapshot = certificate.contentSnapshot as any;
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename=Character_Certificate_${decodedId.replace(/\//g, '_')}.pdf`
-    );
-
-    doc.pipe(res);
-
+  return collectPdfBuffer((doc) => {
     doc.registerFont('Sinhala', SINHALA_FONT_PATH);
 
     // Header
@@ -244,14 +271,7 @@ export function streamCertificatePdf(certificate: CharacterCertificateRecord, re
     doc
       .fontSize(9)
       .text('Official Seal', doc.page.width - 200, signatureY + 40, { width: 120, align: 'center' });
-
-    doc.end();
-  } catch (error) {
-    console.error('Error generating PDF:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
+  }, { margin: 50 });
 }
 
 // Mirrors resolveBoundFieldValue in
@@ -304,23 +324,13 @@ const SINHALA_RANGE = /[඀-෿]/;
 // Mirrors the field defaults in apps/web/lib/certificateTemplates.ts
 // (DEFAULT_FIELD_WIDTH / DEFAULT_FONT_SIZE etc.) — kept as plain literals
 // since the API and web apps don't share a types package.
-function streamTemplateCertificatePdf(
+function buildTemplateCertificatePdf(
   certificate: CharacterCertificateRecord,
-  layout: TemplateLayoutData,
-  res: Response
-) {
-  try {
-    const snapshot = certificate.contentSnapshot as any;
+  layout: TemplateLayoutData
+): Promise<Buffer> {
+  const snapshot = certificate.contentSnapshot as any;
 
-    const doc = new PDFDocument({ size: [layout.canvasWidth, layout.canvasHeight], margin: 0 });
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename=Character_Certificate_${certificate.id.replace(/\//g, '_')}.pdf`
-    );
-
-    doc.pipe(res);
+  return collectPdfBuffer((doc) => {
     doc.registerFont('Sinhala', SINHALA_FONT_PATH);
 
     for (const field of layout.fields as TemplateField[]) {
@@ -338,33 +348,55 @@ function streamTemplateCertificatePdf(
 
       doc.font(font).fontSize(fontSize).text(text, field.x, field.y, { width, align });
     }
-
-    doc.end();
-  } catch (error) {
-    console.error('Error generating template PDF:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
+  }, { size: [layout.canvasWidth, layout.canvasHeight], margin: 0 });
 }
 
 /**
- * Dispatches to the template-driven renderer when the certificate was issued
+ * Renders from the template-driven layout when the certificate was issued
  * with a template and its layoutData still parses; otherwise (no template,
  * template deleted since issuance, or corrupted layoutData) falls back to
  * the default fixed layout rather than failing the download outright.
  */
-function renderCertificatePdf(certificate: CharacterCertificateRecord, res: Response) {
+function buildCertificatePdfBuffer(certificate: CharacterCertificateRecord): Promise<Buffer> {
   if (certificate.template) {
     const parsed = templateLayoutDataSchema.safeParse(certificate.template.layoutData);
     if (parsed.success) {
-      return streamTemplateCertificatePdf(certificate, parsed.data, res);
+      return buildTemplateCertificatePdf(certificate, parsed.data);
     }
     console.error(
       `Certificate ${certificate.id} references template ${certificate.templateId} with invalid layoutData; falling back to default layout.`
     );
   }
-  streamCertificatePdf(certificate, res);
+  return buildDefaultCertificatePdf(certificate);
+}
+
+function certificatePdfBlobKey(certificateId: string): string {
+  return `character-certificates/${certificateId.replace(/\//g, '_')}.pdf`;
+}
+
+/**
+ * Every certificate's rendered PDF lives in blob storage, not regenerated
+ * per download. Returns the existing blob key, or renders once, uploads,
+ * persists the key, and returns it — covers both "just issued" (called
+ * eagerly from issueCertificate) and "issued before this existed" (called
+ * lazily from the download routes as a one-time backfill).
+ */
+async function ensureCertificatePdfBlob(certificate: CharacterCertificateRecord): Promise<string> {
+  if (certificate.pdfBlobKey) {
+    return certificate.pdfBlobKey;
+  }
+  const buffer = await buildCertificatePdfBuffer(certificate);
+  const key = certificatePdfBlobKey(certificate.id);
+  await uploadBlob(key, buffer, 'application/pdf');
+  await prisma.characterCertificate.update({ where: { id: certificate.id }, data: { pdfBlobKey: key } });
+  return key;
+}
+
+async function redirectToCertificatePdf(certificate: CharacterCertificateRecord, res: Response) {
+  const key = await ensureCertificatePdfBlob(certificate);
+  const downloadFilename = `Character_Certificate_${certificate.id.replace(/\//g, '_')}.pdf`;
+  const sasUrl = await getDownloadSasUrl(key, downloadFilename);
+  return res.redirect(302, sasUrl);
 }
 
 export const getCertificatePdf = async (req: Request, res: Response) => {
@@ -375,7 +407,7 @@ export const getCertificatePdf = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Certificate not found' });
     }
 
-    renderCertificatePdf(certificate, res);
+    await redirectToCertificatePdf(certificate, res);
   } catch (error) {
     console.error('Error fetching certificate:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -481,7 +513,7 @@ export const getMyCertificatePdf = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Certificate not found' });
     }
 
-    renderCertificatePdf(certificate, res);
+    await redirectToCertificatePdf(certificate, res);
   } catch (error) {
     console.error('Error fetching own certificate PDF:', error);
     return res.status(500).json({ error: 'Internal server error' });
