@@ -67,10 +67,8 @@ interface IssueCertificatePayload {
   studentAttributes: string
   reasonForLeaving: string
   academicSummary: string
-  // Forward-compat: sent so the backend can pick it up once certificate
-  // issuance is wired to render from a saved template layout. Today the API
-  // silently ignores unrecognized body fields, so this is a no-op there —
-  // the default layout is always what actually gets issued until that lands.
+  // When set, the backend renders the PDF from that template's layoutData
+  // instead of the default fixed layout.
   templateId: number | null
 }
 
@@ -323,14 +321,9 @@ function CertificateComposer({ studentId, onCancel }: { studentId: number, onCan
             </div>
             <p className="text-xs text-muted-foreground">
               {selectedTemplate
-                ? `Preview below reflects "${selectedTemplate.name}".`
+                ? `Issuing will render the certificate using "${selectedTemplate.name}".`
                 : "Using the default certificate layout."}
             </p>
-            {selectedTemplate && (
-              <p className="text-xs text-amber-600 dark:text-amber-500">
-                Note: issuing a certificate always uses the default layout for now — custom-template rendering isn&apos;t wired up yet. The preview below is for design reference only.
-              </p>
-            )}
           </div>
 
           {selectedTemplate && (
