@@ -303,6 +303,10 @@ model CharacterCertificate {
   // default layout, matching this feature's "no template versioning" scope.
   templateId         Int?
   template           CertificateTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  // Blob storage key for the rendered PDF (uploaded at issuance; lazily
+  // backfilled on first download for certificates issued before this
+  // existed). Null just means "not rendered/uploaded yet", not "no PDF".
+  pdfBlobKey         String?
 
   @@index([studentId])
   @@index([principalId])
