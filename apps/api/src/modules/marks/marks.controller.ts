@@ -1,12 +1,85 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/authMiddleware.js';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
 import { createMarkSchema } from '../../validators/markValidators.js';
 
 const prisma = new PrismaClient();
+
+// Story 13.3 — a TermMark now anchors to the Enrollment it was earned in,
+// not the student's current class membership (Epic 13 AD). Thrown by
+// `resolveEnrollmentId` and caught by each caller to map straight to the
+// I/O matrix's 404 (no candidate)/400 (ambiguous) responses, without ever
+// reaching the write path.
+class EnrollmentResolutionError extends Error {
+  status: 400 | 404;
+  constructor(status: 400 | 404, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// Shared by importMarks/createMark: resolves the single Enrollment a mark
+// anchors to for (studentId, year), scoped to `candidateClassIds` -- the
+// classes the calling teacher is authorized to act in for this row. No
+// heuristic fallback: zero matches is a 404, more than one (e.g. a
+// mid-year transfer leaving two same-year enrollments) is a 400.
+async function resolveEnrollmentId(
+  studentId: number,
+  candidateClassIds: number[],
+  year: number,
+  studentLabel: string
+): Promise<number> {
+  const matches = await prisma.enrollment.findMany({
+    where: { studentId, class: { id: { in: candidateClassIds }, year } },
+    select: { id: true },
+  });
+  if (matches.length === 0) {
+    throw new EnrollmentResolutionError(404, `No enrollment found for student ${studentLabel} in ${year}`);
+  }
+  if (matches.length > 1) {
+    throw new EnrollmentResolutionError(400, `Multiple enrollments match student ${studentLabel} in ${year}, cannot resolve`);
+  }
+  return matches[0]!.id;
+}
+
+// Story 13.3 — TermMark now carries TWO unique indexes: the anchor
+// (enrollmentId, subjectId, term) and the retained natural-key guard
+// (studentId, subjectId, term, year) (`TermMark_natural_key_guard` in
+// schema.prisma). Only a P2002 on the natural-key guard means "this exact
+// student/subject/term/year mark already exists under a different
+// enrollment" and maps to 409 (matching the existing 409-on-conflict
+// convention in routes/classes.ts's enrol route). A P2002 on the anchor key
+// instead (e.g. a concurrent double-submit of the identical
+// enrollmentId/subjectId/term) is a different situation and must NOT be
+// mislabeled with the same message -- it falls through to the generic 500.
+const NATURAL_KEY_GUARD_FIELDS = ['studentId', 'subjectId', 'term', 'year'];
+
+function isNaturalKeyViolation(err: unknown): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') {
+    return false;
+  }
+  const target = err.meta?.target;
+  // Postgres (this project's connector) reports `target` as the array of
+  // column names in the violated index; some other connectors/versions
+  // report the constraint/index name as a single string instead. Handle both.
+  if (typeof target === 'string') {
+    return target === 'TermMark_natural_key_guard';
+  }
+  if (Array.isArray(target)) {
+    const fields = new Set(target as unknown[]);
+    return (
+      fields.size === NATURAL_KEY_GUARD_FIELDS.length &&
+      NATURAL_KEY_GUARD_FIELDS.every((f) => fields.has(f))
+    );
+  }
+  return false;
+}
+
+const DUPLICATE_MARK_MESSAGE =
+  'A mark for this student/subject/term/year already exists under a different enrollment';
 
 const markRowSchema = z.object({
   studentIndexNumber: z.string().min(1),
@@ -129,6 +202,38 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Story 13.3 — classIds the teacher is subject-assigned in, grouped by
+    // subject, reused below to build each row's enrollment-resolution
+    // candidate set (mirrors the ownsAClass/hasSubjectAssignment check above).
+    const assignedClassIdsBySubject = new Map<number, number[]>();
+    for (const a of teacher.subjectAssignments) {
+      const list = assignedClassIdsBySubject.get(a.subjectId) ?? [];
+      list.push(a.classId);
+      assignedClassIdsBySubject.set(a.subjectId, list);
+    }
+
+    // Resolve every row's anchor Enrollment BEFORE the transaction opens:
+    // if any row is unresolved (404/400), the whole import bails out here
+    // and no TermMark for ANY row -- including already-resolved ones -- is
+    // ever written, preserving the pre-13.3 all-or-nothing guarantee.
+    const rowEnrollmentIds: number[] = [];
+    for (const row of parsedRows) {
+      const student = studentMap.get(row.studentIndexNumber)!;
+      const rowSubjectId = subjectIdByName.get(row.subjectName);
+      const candidateClassIds = [
+        ...new Set([...teacherClassIds, ...(rowSubjectId !== undefined ? assignedClassIdsBySubject.get(rowSubjectId) ?? [] : [])]),
+      ];
+      try {
+        const enrollmentId = await resolveEnrollmentId(student.id, candidateClassIds, row.year, row.studentIndexNumber);
+        rowEnrollmentIds.push(enrollmentId);
+      } catch (e) {
+        if (e instanceof EnrollmentResolutionError) {
+          return res.status(e.status).json({ error: e.message });
+        }
+        throw e;
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       // Upsert subjects inside the transaction so a brand-new subject name
       // can never be left committed if the import fails partway through.
@@ -142,27 +247,29 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
         subjectMap.set(subName, subject.id);
       }
 
-      for (const row of parsedRows) {
+      for (let i = 0; i < parsedRows.length; i++) {
+        const row = parsedRows[i]!;
         const student = studentMap.get(row.studentIndexNumber)!;
         const subjectId = subjectMap.get(row.subjectName)!;
+        const enrollmentId = rowEnrollmentIds[i]!;
 
         await tx.termMark.upsert({
           where: {
-            studentId_subjectId_term_year: {
-              studentId: student.id,
-              subjectId: subjectId,
+            enrollmentId_subjectId_term: {
+              enrollmentId,
+              subjectId,
               term: row.term,
-              year: row.year
-            }
+            },
           },
           update: { marks: row.marks },
           create: {
             studentId: student.id,
-            subjectId: subjectId,
+            subjectId,
             term: row.term,
             year: row.year,
-            marks: row.marks
-          }
+            marks: row.marks,
+            enrollmentId,
+          },
         });
       }
     });
@@ -170,6 +277,9 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
     return res.status(200).json({ message: `Successfully imported ${parsedRows.length} mark(s)` });
 
   } catch (err: any) {
+    if (isNaturalKeyViolation(err)) {
+      return res.status(409).json({ error: DUPLICATE_MARK_MESSAGE });
+    }
     console.error('Import marks error:', err);
     return res.status(500).json({ error: 'Internal server error', details: err.message });
   }
@@ -219,6 +329,20 @@ export const createMark = async (req: AuthRequest, res: Response) => {
         .json({ error: `You do not have permission to modify marks for student ${studentIndexNumber}` });
     }
 
+    // Story 13.3 — resolve this mark's anchor Enrollment before writing
+    // anything. Unlike importMarks, createMark has no TeacherSubjectAssignment
+    // awareness (a pre-existing gap predating this story), so the candidate
+    // set is just the classes the teacher owns.
+    let enrollmentId: number;
+    try {
+      enrollmentId = await resolveEnrollmentId(student.id, teacherClassIds, year, studentIndexNumber);
+    } catch (e) {
+      if (e instanceof EnrollmentResolutionError) {
+        return res.status(e.status).json({ error: e.message });
+      }
+      throw e;
+    }
+
     const mark = await prisma.$transaction(async (tx) => {
       // Upsert the subject inside the transaction, matching `importMarks` —
       // a brand-new subject name is never left committed if the mark write fails.
@@ -229,14 +353,14 @@ export const createMark = async (req: AuthRequest, res: Response) => {
       });
 
       const existing = await tx.termMark.findUnique({
-        where: { studentId_subjectId_term_year: { studentId: student.id, subjectId: subject.id, term, year } },
+        where: { enrollmentId_subjectId_term: { enrollmentId, subjectId: subject.id, term } },
         select: { id: true },
       });
 
       const termMark = await tx.termMark.upsert({
-        where: { studentId_subjectId_term_year: { studentId: student.id, subjectId: subject.id, term, year } },
+        where: { enrollmentId_subjectId_term: { enrollmentId, subjectId: subject.id, term } },
         update: { marks },
-        create: { studentId: student.id, subjectId: subject.id, term, year, marks },
+        create: { studentId: student.id, subjectId: subject.id, term, year, marks, enrollmentId },
       });
 
       return { termMark, subjectName: subject.name, created: existing === null };
@@ -252,6 +376,9 @@ export const createMark = async (req: AuthRequest, res: Response) => {
       marks: mark.termMark.marks,
     });
   } catch (err: any) {
+    if (isNaturalKeyViolation(err)) {
+      return res.status(409).json({ error: DUPLICATE_MARK_MESSAGE });
+    }
     console.error('Create mark error:', err);
     return res.status(500).json({ error: 'Internal server error', details: err.message });
   }
@@ -348,11 +475,12 @@ export const getClassMarks = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Teacher is not assigned to any classes' });
     }
 
+    // Story 13.3 — anchored to the enrollment's class, not the student's
+    // current class list: a teacher must keep seeing marks recorded under
+    // their class's enrollment even after the student transfers away.
     const termMarks = await prisma.termMark.findMany({
       where: {
-        student: {
-          classes: { some: { id: { in: teacherClassIds } } },
-        },
+        enrollment: { classId: { in: teacherClassIds } },
       },
       include: { student: true, subject: true },
       orderBy: [

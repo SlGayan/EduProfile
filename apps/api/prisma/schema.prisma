@@ -157,21 +157,42 @@ model TeacherSubjectAssignment {
   @@index([classId])
 }
 
+// Story 13.3 — anchors a mark to the Enrollment it was earned in (Epic 13
+// AD: "marks anchor to the enrollment") rather than the student's current
+// class membership, so a promoted or transferred student's marks stay with
+// the enrollment/class/teacher that recorded them. `studentId`/`year` remain
+// denormalized copies of the resolved enrollment's data: seven other
+// controllers (analytics/certificates/teacher-dashboard/principal-dashboard/
+// materials/students) still read them directly and are out of this story's
+// scope; only marks.controller.ts resolves/writes through the anchor.
 model TermMark {
-  id        Int      @id @default(autoincrement())
-  studentId Int
-  student   Student  @relation(fields: [studentId], references: [id])
-  subjectId Int
-  subject   Subject  @relation(fields: [subjectId], references: [id])
-  term      Int
-  year      Int
-  marks     Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int        @id @default(autoincrement())
+  studentId    Int
+  student      Student    @relation(fields: [studentId], references: [id])
+  subjectId    Int
+  subject      Subject    @relation(fields: [subjectId], references: [id])
+  term         Int
+  year         Int
+  marks        Int
+  enrollmentId Int
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  @@unique([studentId, subjectId, term, year])
+  // Anchor key: lets the same student earn a new mark for the same
+  // subject/term after a repeat/promotion, since `enrollmentId` differs.
+  @@unique([enrollmentId, subjectId, term])
+  // Natural-key guard, kept from the pre-13.3 schema (same underlying DB
+  // index name -- see the backfill migration): without it, two different
+  // same-year enrollments (e.g. either side of a mid-year transfer) could
+  // each hold a mark for the same student/subject/term/year, a case the
+  // enrollment-anchored key alone permits but certificate/profile reads
+  // (which bake `student.termMarks` into signed content without dedup)
+  // cannot tolerate. A P2002 here maps to 409 in the controller.
+  @@unique([studentId, subjectId, term, year], name: "TermMark_natural_key_guard")
   @@index([studentId])
   @@index([subjectId])
+  @@index([enrollmentId])
 }
 
 // Story 13.2 — enrollment as a time-bounded record (AD-1 Phase 1).
@@ -201,6 +222,7 @@ model Enrollment {
   status      EnrollmentStatus @default(ACTIVE)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
+  termMarks   TermMark[]
 
   @@unique([studentId, classId, enrolledAt])
   @@index([studentId])

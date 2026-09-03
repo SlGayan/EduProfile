@@ -134,7 +134,15 @@ describe('Teacher dashboard endpoint (GET /api/teachers/me/dashboard)', () => {
           classes: { connect: [{ id: mainClassId }] },
         },
       });
-      return { userId: user.id, studentId: student.id };
+      // Story 13.3 — TermMark now anchors to an Enrollment, so every
+      // student that gets a mark below needs one for mainClassId/YEAR.
+      const enrolledAt = new Date(Date.UTC(YEAR, 0, 1));
+      const enrollment = await prisma.enrollment.upsert({
+        where: { studentId_classId_enrolledAt: { studentId: student.id, classId: mainClassId, enrolledAt } },
+        update: { status: 'ACTIVE', leftAt: null },
+        create: { studentId: student.id, classId: mainClassId, enrolledAt, status: 'ACTIVE' },
+      });
+      return { userId: user.id, studentId: student.id, enrollmentId: enrollment.id };
     }
 
     // "full": marked in every subject, all passing -> not pending, no support flag.
@@ -153,12 +161,12 @@ describe('Teacher dashboard endpoint (GET /api/teachers/me/dashboard)', () => {
     // instead of layering marks on top of a previous run's rows.
     await prisma.termMark.deleteMany({ where: { studentId: { in: studentIds }, year: YEAR, term: TERM } });
 
-    const markRows: { studentId: number; subjectId: number; term: number; year: number; marks: number }[] = [];
+    const markRows: { studentId: number; subjectId: number; term: number; year: number; marks: number; enrollmentId: number }[] = [];
     for (const s of subjects) {
-      markRows.push({ studentId: full.studentId, subjectId: s.id, term: TERM, year: YEAR, marks: 80 });
+      markRows.push({ studentId: full.studentId, subjectId: s.id, term: TERM, year: YEAR, marks: 80, enrollmentId: full.enrollmentId });
     }
     for (const s of subjects.slice(0, subjects.length - 1)) {
-      markRows.push({ studentId: partial.studentId, subjectId: s.id, term: TERM, year: YEAR, marks: 80 });
+      markRows.push({ studentId: partial.studentId, subjectId: s.id, term: TERM, year: YEAR, marks: 80, enrollmentId: partial.enrollmentId });
     }
     subjects.forEach((s, i) => {
       markRows.push({
@@ -167,6 +175,7 @@ describe('Teacher dashboard endpoint (GET /api/teachers/me/dashboard)', () => {
         term: TERM,
         year: YEAR,
         marks: i === 0 ? 40 : 80,
+        enrollmentId: support.enrollmentId,
       });
     });
     await prisma.termMark.createMany({ data: markRows });
@@ -179,6 +188,9 @@ describe('Teacher dashboard endpoint (GET /api/teachers/me/dashboard)', () => {
 
   afterAll(async () => {
     await prisma.termMark.deleteMany({ where: { studentId: { in: studentIds } } });
+    // Story 13.3 — Enrollment is ON DELETE RESTRICT against both Student and
+    // Class, so it must be torn down before either of those below.
+    await prisma.enrollment.deleteMany({ where: { studentId: { in: studentIds } } });
     await prisma.student.deleteMany({ where: { userId: { in: studentUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: studentUserIds } } });
     await prisma.class.deleteMany({ where: { id: { in: [mainClassId, zeroStudentClassId] } } });
