@@ -14,6 +14,7 @@ describe('Character certificate endpoints', () => {
   let principalToken: string;
   let teacherToken: string;
   let studentId: number;
+  const createdTemplateIds: number[] = [];
 
   beforeAll(async () => {
     principalToken = await login('principal@edu.com');
@@ -24,6 +25,9 @@ describe('Character certificate endpoints', () => {
   });
 
   afterAll(async () => {
+    // ON DELETE SET NULL means deleting the template is enough to detach any
+    // certificate that referenced it.
+    await prisma.certificateTemplate.deleteMany({ where: { id: { in: createdTemplateIds } } });
     await prisma.$disconnect();
   });
 
@@ -104,5 +108,39 @@ describe('Character certificate endpoints', () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(studentId);
     expect(Array.isArray(res.body.activities)).toBe(true);
+  });
+
+  it('issues a certificate against a template and renders the PDF from its layout, not the default', async () => {
+    const templateRes = await request(app)
+      .post('/api/certificate-templates')
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({
+        name: 'Template-rendering test layout',
+        layoutData: {
+          canvasWidth: 850,
+          canvasHeight: 600,
+          fields: [
+            { id: 'f1', kind: 'bound', boundField: 'STUDENT_NAME', x: 10, y: 10 },
+            { id: 'f2', kind: 'text', text: 'Custom letterhead text', x: 10, y: 60 },
+          ],
+        },
+      });
+    expect(templateRes.status).toBe(201);
+    const templateId = templateRes.body.template.id as number;
+    createdTemplateIds.push(templateId);
+
+    const issueRes = await request(app)
+      .post('/api/certificates')
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ studentId, characterGrade: 'GOOD', templateId });
+    expect(issueRes.status).toBe(201);
+    expect(issueRes.body.templateId).toBe(templateId);
+
+    const encodedId = Buffer.from(issueRes.body.id, 'utf8').toString('base64url');
+    const pdfRes = await request(app)
+      .get(`/api/certificates/${encodedId}/pdf`)
+      .set('Authorization', `Bearer ${principalToken}`);
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.headers['content-type']).toContain('application/pdf');
   });
 });

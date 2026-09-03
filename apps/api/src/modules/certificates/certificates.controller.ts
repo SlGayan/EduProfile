@@ -5,6 +5,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { AuthRequest } from '../../middleware/authMiddleware.js';
 import PDFDocument from 'pdfkit';
 import { issueCertificateSchema } from '../../validators/certificateValidators.js';
+import { templateLayoutDataSchema, type TemplateLayoutData, type TemplateField } from '../../validators/certificateTemplateValidators.js';
 
 const prisma = new PrismaClient();
 
@@ -61,9 +62,17 @@ export const issueCertificate = async (req: AuthRequest, res: Response) => {
       characterGrade,
       studentAttributes,
       academicSummary,
+      templateId,
     } = parsed.data;
 
     const principalId = req.user!.id;
+
+    if (templateId != null) {
+      const template = await prisma.certificateTemplate.findUnique({ where: { id: templateId } });
+      if (!template) {
+        return res.status(404).json({ error: 'Certificate template not found' });
+      }
+    }
 
     const student = await prisma.student.findUnique({
       where: { id: studentId, user: { deletedAt: null } },
@@ -105,6 +114,7 @@ export const issueCertificate = async (req: AuthRequest, res: Response) => {
       studentAttributes: studentAttributes ?? null,
       academicSummary: academicSummary ?? null,
       contentSnapshot: contentSnapshot as any,
+      ...(templateId != null ? { template: { connect: { id: templateId } } } : {}),
     });
 
     return res.status(201).json(certificate);
@@ -129,7 +139,10 @@ export const issueCertificate = async (req: AuthRequest, res: Response) => {
  */
 export async function findCertificateByIdParam(rawId: string) {
   const decodedId = Buffer.from(rawId, 'base64url').toString('utf8');
-  return prisma.characterCertificate.findUnique({ where: { id: decodedId } });
+  return prisma.characterCertificate.findUnique({
+    where: { id: decodedId },
+    include: { template: true },
+  });
 }
 
 type CharacterCertificateRecord = NonNullable<
@@ -241,6 +254,119 @@ export function streamCertificatePdf(certificate: CharacterCertificateRecord, re
   }
 }
 
+// Mirrors resolveBoundFieldValue in
+// apps/web/app/(main)/principal/issue-certificate/page.tsx, but reading from
+// the issued certificate's immutable snapshot/id/issuedAt instead of the
+// composer's in-progress form state.
+const CHARACTER_GRADE_TITLE_LABELS: Record<string, string> = {
+  GOOD: 'Good',
+  VERY_GOOD: 'Very Good',
+  EXCELLENT: 'Excellent',
+};
+
+function resolveTemplateBoundValue(
+  key: string,
+  certificate: CharacterCertificateRecord,
+  snapshot: any
+): string {
+  switch (key) {
+    case 'STUDENT_NAME':
+      return snapshot.fullName ?? '';
+    case 'ADMISSION_NUMBER':
+      return snapshot.admissionNumber || 'N/A';
+    case 'DATE_OF_ADMISSION':
+      return snapshot.dateOfAdmission ? new Date(snapshot.dateOfAdmission).toLocaleDateString() : 'N/A';
+    case 'ATTENDANCE_PERCENTAGE':
+      return snapshot.attendancePercentage !== null && snapshot.attendancePercentage !== undefined
+        ? `${snapshot.attendancePercentage}%`
+        : 'N/A';
+    case 'CHARACTER_GRADE':
+      return CHARACTER_GRADE_TITLE_LABELS[snapshot.characterGrade] ?? snapshot.characterGrade ?? '';
+    case 'STUDENT_ATTRIBUTES':
+      return snapshot.studentAttributes || '';
+    case 'REASON_FOR_LEAVING':
+      return snapshot.reasonForLeaving || '';
+    case 'ACADEMIC_SUMMARY':
+      return snapshot.academicSummary || 'Completed studies satisfactorily.';
+    case 'CERTIFICATE_ID':
+      return certificate.id;
+    case 'ISSUED_DATE':
+      return certificate.issuedAt.toLocaleDateString();
+    default:
+      return '';
+  }
+}
+
+// Sinhala free-type text fields (e.g. the school name) need the embedded
+// Sinhala font — Helvetica has no glyphs for that Unicode range.
+const SINHALA_RANGE = /[඀-෿]/;
+
+// Mirrors the field defaults in apps/web/lib/certificateTemplates.ts
+// (DEFAULT_FIELD_WIDTH / DEFAULT_FONT_SIZE etc.) — kept as plain literals
+// since the API and web apps don't share a types package.
+function streamTemplateCertificatePdf(
+  certificate: CharacterCertificateRecord,
+  layout: TemplateLayoutData,
+  res: Response
+) {
+  try {
+    const snapshot = certificate.contentSnapshot as any;
+
+    const doc = new PDFDocument({ size: [layout.canvasWidth, layout.canvasHeight], margin: 0 });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=Character_Certificate_${certificate.id.replace(/\//g, '_')}.pdf`
+    );
+
+    doc.pipe(res);
+    doc.registerFont('Sinhala', SINHALA_FONT_PATH);
+
+    for (const field of layout.fields as TemplateField[]) {
+      const text =
+        field.kind === 'bound' && field.boundField
+          ? resolveTemplateBoundValue(field.boundField, certificate, snapshot)
+          : field.text ?? '';
+
+      const isTextField = field.kind === 'text';
+      const fontSize = isTextField ? field.fontSize ?? 12 : 11;
+      const bold = isTextField && field.fontWeight === 'bold';
+      const align = isTextField ? field.textAlign ?? 'left' : 'left';
+      const width = field.width ?? 170;
+      const font = SINHALA_RANGE.test(text) ? 'Sinhala' : bold ? 'Helvetica-Bold' : 'Helvetica';
+
+      doc.font(font).fontSize(fontSize).text(text, field.x, field.y, { width, align });
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error('Error generating template PDF:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+}
+
+/**
+ * Dispatches to the template-driven renderer when the certificate was issued
+ * with a template and its layoutData still parses; otherwise (no template,
+ * template deleted since issuance, or corrupted layoutData) falls back to
+ * the default fixed layout rather than failing the download outright.
+ */
+function renderCertificatePdf(certificate: CharacterCertificateRecord, res: Response) {
+  if (certificate.template) {
+    const parsed = templateLayoutDataSchema.safeParse(certificate.template.layoutData);
+    if (parsed.success) {
+      return streamTemplateCertificatePdf(certificate, parsed.data, res);
+    }
+    console.error(
+      `Certificate ${certificate.id} references template ${certificate.templateId} with invalid layoutData; falling back to default layout.`
+    );
+  }
+  streamCertificatePdf(certificate, res);
+}
+
 export const getCertificatePdf = async (req: Request, res: Response) => {
   try {
     const certificate = await findCertificateByIdParam(req.params.id as string);
@@ -249,7 +375,7 @@ export const getCertificatePdf = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Certificate not found' });
     }
 
-    streamCertificatePdf(certificate, res);
+    renderCertificatePdf(certificate, res);
   } catch (error) {
     console.error('Error fetching certificate:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -355,7 +481,7 @@ export const getMyCertificatePdf = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Certificate not found' });
     }
 
-    streamCertificatePdf(certificate, res);
+    renderCertificatePdf(certificate, res);
   } catch (error) {
     console.error('Error fetching own certificate PDF:', error);
     return res.status(500).json({ error: 'Internal server error' });

@@ -38,7 +38,7 @@ const templateFieldSchema = z
     message: 'boundField is required when kind is "bound"',
   });
 
-const templateLayoutDataSchema = z.object({
+export const templateLayoutDataSchema = z.object({
   canvasWidth: z.number().finite().positive(),
   canvasHeight: z.number().finite().positive(),
   fields: z.array(templateFieldSchema).max(200),
@@ -62,3 +62,5 @@ export const updateCertificateTemplateSchema = z
 
 export type CreateCertificateTemplateInput = z.infer<typeof createCertificateTemplateSchema>;
 export type UpdateCertificateTemplateInput = z.infer<typeof updateCertificateTemplateSchema>;
+export type TemplateLayoutData = z.infer<typeof templateLayoutDataSchema>;
+export type TemplateField = z.infer<typeof templateFieldSchema>;
