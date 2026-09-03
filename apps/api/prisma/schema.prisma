@@ -18,15 +18,15 @@ enum UserRole {
 }
 
 model User {
-  id                          Int                        @id @default(autoincrement())
-  email                       String                     @unique
+  id                          Int                       @id @default(autoincrement())
+  email                       String                    @unique
   password                    String
   role                        UserRole
   gender                      Gender?
-  createdAt                   DateTime                   @default(now())
-  updatedAt                   DateTime                   @updatedAt
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
   deletedAt                   DateTime?
-  mustChangePassword          Boolean                    @default(false)
+  mustChangePassword          Boolean                   @default(false)
   student                     Student?
   teacher                     Teacher?
   issuedCertificates          CharacterCertificate[]
@@ -64,7 +64,7 @@ model Student {
   photoUrl             String?
   phoneNumber          String?
   gender               Gender?
-  status               StudentStatus              @default(ACTIVE)
+  status               StudentStatus             @default(ACTIVE)
   classes              Class[]
   enrollments          Enrollment[]
   termMarks            TermMark[]
@@ -73,8 +73,8 @@ model Student {
   studentCertificates  StudentCertificate[]
   profileEditRequests  ProfileEditRequest[]
   guardian             Guardian?
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
 }
 
 model Guardian {
@@ -191,16 +191,16 @@ enum EnrollmentStatus {
 }
 
 model Enrollment {
-  id          Int              @id @default(autoincrement())
-  studentId   Int
-  student     Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  classId     Int
-  class       Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
-  enrolledAt  DateTime
-  leftAt      DateTime?
-  status      EnrollmentStatus @default(ACTIVE)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id         Int              @id @default(autoincrement())
+  studentId  Int
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId    Int
+  class      Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  enrolledAt DateTime
+  leftAt     DateTime?
+  status     EnrollmentStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   @@unique([studentId, classId, enrolledAt])
   @@index([studentId])
@@ -285,21 +285,28 @@ enum CharacterGrade {
 }
 
 model CharacterCertificate {
-  id                 String          @id // Format: DSCTH/CC/YYYY/NNNN
+  id                 String               @id // Format: DSCTH/CC/YYYY/NNNN
   studentId          Int
-  student            Student         @relation(fields: [studentId], references: [id])
+  student            Student              @relation(fields: [studentId], references: [id])
   principalId        Int
-  principal          User            @relation(fields: [principalId], references: [id])
+  principal          User                 @relation(fields: [principalId], references: [id])
   selectedActivities String[]
   reasonForLeaving   String?
   characterGrade     CharacterGrade?
   studentAttributes  String?
   academicSummary    String?
-  issuedAt           DateTime        @default(now())
+  issuedAt           DateTime             @default(now())
   contentSnapshot    Json
+  // Which letterhead layout to render the PDF from. Null = the default
+  // fixed layout (frozen path). SetNull so deleting a template doesn't
+  // break certificates already issued with it — they just revert to the
+  // default layout, matching this feature's "no template versioning" scope.
+  templateId         Int?
+  template           CertificateTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@index([studentId])
   @@index([principalId])
+  @@index([templateId])
 }
 
 enum StudentCertificateStatus {
@@ -316,9 +323,9 @@ enum StudentCertificateStatus {
 // ExtracurricularActivity so a teacher/admin can verify it before it counts
 // as confirmed on the student's record.
 model StudentCertificate {
-  id                  Int      @id @default(autoincrement())
+  id                  Int                      @id @default(autoincrement())
   studentId           Int
-  student             Student  @relation(fields: [studentId], references: [id])
+  student             Student                  @relation(fields: [studentId], references: [id])
   title               String
   issuingOrganization String
   issueDate           DateTime
@@ -330,10 +337,10 @@ model StudentCertificate {
   status              StudentCertificateStatus @default(PENDING)
   teacherNote         String?
   reviewedById        Int?
-  reviewedBy          User?    @relation(fields: [reviewedById], references: [id])
+  reviewedBy          User?                    @relation(fields: [reviewedById], references: [id])
   reviewedAt          DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   @@index([studentId])
 }
@@ -345,13 +352,14 @@ model StudentCertificate {
 // mirroring CharacterCertificate.contentSnapshot's use of Json for
 // structured, editor-owned data.
 model CertificateTemplate {
-  id          Int      @id @default(autoincrement())
-  name        String
-  layoutData  Json
-  createdById Int
-  createdBy   User     @relation(fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           Int                    @id @default(autoincrement())
+  name         String
+  layoutData   Json
+  createdById  Int
+  createdBy    User                   @relation(fields: [createdById], references: [id])
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  certificates CharacterCertificate[]
 
   @@index([createdById])
 }

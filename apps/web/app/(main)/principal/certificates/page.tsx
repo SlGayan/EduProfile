@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { apiFetch } from "@/lib/apiFetch"
+import { encodeCertificateId } from "@/lib/certificates"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -53,7 +54,7 @@ export default function CertificatesListPage() {
 
   const handleDownload = async (certId: string) => {
     try {
-      const res = await apiFetch(`/api/certificates/${encodeURIComponent(certId)}/pdf`)
+      const res = await apiFetch(`/api/certificates/${encodeCertificateId(certId)}/pdf`)
       if (!res.ok) throw new Error("Failed to download certificate")
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
