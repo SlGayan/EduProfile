@@ -86,6 +86,17 @@ function escapeLikeWildcards(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
 }
 
+// Guard against syncEnrollment silently pulling a student out of a different
+// same-year class (bugfix: spec-sync-enrollment-duplicate-guard). Message-
+// carrying Error subclass so both call sites below can map it to a 409
+// without re-deriving the text.
+class ClassEnrollmentConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClassEnrollmentConflictError';
+  }
+}
+
 // Story 13.2 — keep Enrollment in sync with the implicit relation for every
 // path that connects a student to a class, not just classes.ts's dedicated
 // enrol route (this file's `/import` and `/` auto-enrol a student too).
@@ -98,6 +109,26 @@ async function syncEnrollment(
   classId: number,
   classYear: number
 ) {
+  // Bugfix: spec-sync-enrollment-duplicate-guard — mirrors classes.ts's
+  // dedicated enrol route's same-year-different-class conflict check
+  // (classes.ts:230-245), which this function never inherited even though it
+  // performs the same class-connect. Without it, a teacher/admin adding or
+  // importing a student by indexNumber could silently pull them out of
+  // another teacher's class into their own, leaving two concurrent ACTIVE
+  // Enrollments that permanently block mark entry (Story 13.3).
+  const conflict = await tx.class.findFirst({
+    where: {
+      id: { not: classId },
+      year: classYear,
+      students: { some: { id: studentId } },
+    },
+  });
+  if (conflict) {
+    throw new ClassEnrollmentConflictError(
+      `Student is already enrolled in "${deriveClassName(conflict)}" for ${classYear}`
+    );
+  }
+
   const enrolledAt = new Date(Date.UTC(classYear, 0, 1));
   await tx.enrollment.upsert({
     where: { studentId_classId_enrolledAt: { studentId, classId, enrolledAt } },
@@ -563,6 +594,9 @@ router.post('/import', requireRole(['ADMINISTRATOR', 'TEACHER']), upload.single(
         }
       });
     } catch (txErr: any) {
+      if (txErr instanceof ClassEnrollmentConflictError) {
+        return res.status(409).json({ error: txErr.message });
+      }
       console.error('Student import transaction failed:', txErr);
       if (txErr?.code === 'P2002') {
         return res.status(409).json({
@@ -697,6 +731,9 @@ router.post('/', requireRole(['ADMINISTRATOR', 'TEACHER']), async (req: AuthRequ
 
     return res.status(201).json({ message: 'Student created', id: student.id, indexNumber: student.indexNumber });
   } catch (err: any) {
+    if (err instanceof ClassEnrollmentConflictError) {
+      return res.status(409).json({ error: err.message });
+    }
     if (err?.code === 'P2002') {
       return res.status(409).json({
         error: 'A student with that email or index number already exists',
