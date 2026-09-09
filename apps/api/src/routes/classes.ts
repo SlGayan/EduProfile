@@ -4,6 +4,7 @@ import { verifyToken, requireRole, AuthRequest } from '../middleware/authMiddlew
 import { createClassSchema, updateClassSchema, addStudentSchema, assignTeacherSchema } from '../validators/classValidators.js';
 import { listAssignmentsForClass } from '../modules/teacherSubjectAssignments/teacherSubjectAssignments.controller.js';
 import { deriveClassName, withClassName } from '../lib/classIdentity.js';
+import { assignClassOwnership } from '../lib/temporal/classOwnership.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -67,14 +68,26 @@ router.post('/', async (req: AuthRequest, res) => {
             });
         }
 
-        const newClass = await prisma.class.create({
-            data: {
-                gradeLevel,
-                section,
-                year,
-                teacherId: teacherId ?? null,
-            },
-            include: { teacher: true }
+        // Story 13.4 — a class created with an owner already set must be
+        // visible via ClassOwnership immediately, not only after a later
+        // reassignment through PUT /:id or POST /:id/teacher. Same
+        // transaction as the Class.teacherId write, mirroring the other two
+        // endpoints. Skipped when teacherId is null/omitted — nothing to
+        // assign yet.
+        const newClass = await prisma.$transaction(async (tx) => {
+            const created = await tx.class.create({
+                data: {
+                    gradeLevel,
+                    section,
+                    year,
+                    teacherId: teacherId ?? null,
+                },
+                include: { teacher: true }
+            });
+            if (teacherId) {
+                await assignClassOwnership(tx, created.id, teacherId);
+            }
+            return created;
         });
 
         return res.status(201).json({ class: withClassName(newClass) });
@@ -143,14 +156,25 @@ router.put('/:id', async (req: AuthRequest, res) => {
             });
         }
 
-        const updatedClass = await prisma.class.update({
-            where: { id },
-            data: {
-                ...(gradeLevel !== undefined && { gradeLevel }),
-                ...(section !== undefined && { section }),
-                ...(year !== undefined && { year }),
-                ...(teacherId !== undefined && { teacherId })
-            },
+        // Story 13.4 — a teacherId change (including to null, unassigning)
+        // keeps ClassOwnership in sync with this write, in the same
+        // transaction, mirroring 13.2's dual-write precedent. A teacherId
+        // that isn't actually changing does not touch ClassOwnership.
+        const teacherIdChanging = teacherId !== undefined && teacherId !== existing.teacherId;
+        const updatedClass = await prisma.$transaction(async (tx) => {
+            const updated = await tx.class.update({
+                where: { id },
+                data: {
+                    ...(gradeLevel !== undefined && { gradeLevel }),
+                    ...(section !== undefined && { section }),
+                    ...(year !== undefined && { year }),
+                    ...(teacherId !== undefined && { teacherId })
+                },
+            });
+            if (teacherIdChanging) {
+                await assignClassOwnership(tx, id, teacherId);
+            }
+            return updated;
         });
 
         return res.status(200).json({ class: withClassName(updatedClass) });
@@ -199,9 +223,21 @@ router.post('/:id/teacher', async (req: AuthRequest, res) => {
         const existing = await prisma.class.findUnique({ where: { id } });
         if (!existing) return res.status(404).json({ error: 'Class not found' });
 
-        const updatedClass = await prisma.class.update({
-            where: { id },
-            data: { teacherId }
+        // Story 13.4 — closes the outgoing owner's open row and opens one for
+        // the incoming teacher in the same transaction as the teacherId
+        // write, mirroring 13.2's dual-write precedent. Skipped when the
+        // teacher isn't actually changing, so a repeat/idempotent call
+        // doesn't reset the current owner's tenure start date.
+        const teacherIdChanging = teacherId !== existing.teacherId;
+        const updatedClass = await prisma.$transaction(async (tx) => {
+            const updated = await tx.class.update({
+                where: { id },
+                data: { teacherId }
+            });
+            if (teacherIdChanging) {
+                await assignClassOwnership(tx, id, teacherId);
+            }
+            return updated;
         });
 
         return res.status(200).json({ class: withClassName(updatedClass) });

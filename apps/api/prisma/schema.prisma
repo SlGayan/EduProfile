@@ -100,6 +100,9 @@ model Teacher {
   studyMaterials              StudyMaterial[]
   subjectAssignments          TeacherSubjectAssignment[]
   reviewedProfileEditRequests ProfileEditRequest[]
+  // Story 13.4 — time-bounded ownership history. Back-relation only; every
+  // read goes through lib/temporal/classOwnership.ts, never this field.
+  classOwnerships             ClassOwnership[]
   createdAt                   DateTime                   @default(now())
   updatedAt                   DateTime                   @updatedAt
 }
@@ -120,10 +123,36 @@ model Class {
   enrollments        Enrollment[]
   studyMaterials     StudyMaterial[]
   subjectAssignments TeacherSubjectAssignment[]
+  // Story 13.4 — time-bounded ownership history (see ClassOwnership below).
+  ownerships         ClassOwnership[]
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
 
   @@unique([gradeLevel, section, year])
+}
+
+// Story 13.4 — time-bounded class ownership (Epic 13's first lib/temporal/
+// model). `Class.teacherId` remains the live, write-authoritative FK for
+// this story (mirrors 13.2 keeping the implicit class<->student relation
+// alive alongside Enrollment) -- dropping it is later full-contract cleanup,
+// not this story. This table is the append-only history of who owned a
+// class when; interval is half-open [fromDate, toDate). `toDate IS NULL`
+// means currently open (the present owner). Only
+// apps/api/src/lib/temporal/classOwnership.ts may query this model -- no
+// controller reads or writes it directly.
+model ClassOwnership {
+  id        Int       @id @default(autoincrement())
+  classId   Int
+  class     Class     @relation(fields: [classId], references: [id])
+  teacherId Int
+  teacher   Teacher   @relation(fields: [teacherId], references: [id])
+  fromDate  DateTime
+  toDate    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([classId])
+  @@index([teacherId])
 }
 
 model Subject {

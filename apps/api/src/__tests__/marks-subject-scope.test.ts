@@ -17,6 +17,21 @@ function csvOf(rows: { studentIndexNumber: string; subjectName: string; term: nu
   return [header, ...lines].join('\n');
 }
 
+// Story 13.4 — ownership reads (marks.controller.ts's teacherClassIds) now go
+// through ClassOwnership, not `Class.teacherId`, so these fixtures must seed
+// a matching open row alongside every raw `teacherId` write below. The raw
+// `teacherId` writes themselves are left as-is per this story's scope --
+// `Class.teacherId` stays write-authoritative. Idempotent across re-runs: if
+// an open row for a different teacher exists it's closed first.
+async function ensureOwnership(classId: number, teacherId: number) {
+  const open = await prisma.classOwnership.findFirst({ where: { classId, toDate: null } });
+  if (open && open.teacherId === teacherId) return;
+  if (open) {
+    await prisma.classOwnership.update({ where: { id: open.id }, data: { toDate: new Date() } });
+  }
+  await prisma.classOwnership.create({ data: { classId, teacherId, fromDate: new Date() } });
+}
+
 /**
  * Covers Story 12.3 (subject-scoped mark edit enforcement) against a real
  * DB. Fixtures use a `marksscope_*` email prefix and year 2031 (unused by
@@ -84,6 +99,7 @@ describe('Subject-scoped mark authorization (Story 12.3)', () => {
       klass = await prisma.class.update({ where: { id: klass.id }, data: { teacherId: ownerTeacherId } });
     }
     classId = klass.id;
+    await ensureOwnership(classId, ownerTeacherId);
 
     const assignedSubject = await prisma.subject.upsert({
       where: { name: 'Mark Scope Assigned Subject' },
@@ -185,6 +201,9 @@ describe('Subject-scoped mark authorization (Story 12.3)', () => {
     await prisma.student.deleteMany({ where: { userId: noEnrollmentStudentUserId } });
     await prisma.user.deleteMany({ where: { id: studentUserId } });
     await prisma.user.deleteMany({ where: { id: noEnrollmentStudentUserId } });
+    // Story 13.4 — ClassOwnership is ON DELETE RESTRICT against both Class and
+    // Teacher, so it must be torn down before either of those below.
+    await prisma.classOwnership.deleteMany({ where: { classId } });
     await prisma.class.deleteMany({ where: { id: classId } });
     await prisma.teacher.deleteMany({ where: { id: { in: [ownerTeacherId, assignedTeacherId, outsiderTeacherId] } } });
     await prisma.user.deleteMany({ where: { id: { in: [ownerUserId, assignedUserId, outsiderUserId] } } });
@@ -370,6 +389,7 @@ describe('Enrollment anchoring (Story 13.3)', () => {
       } else {
         klass = await prisma.class.update({ where: { id: klass.id }, data: { teacherId } });
       }
+      await ensureOwnership(klass.id, teacherId);
       return klass.id;
     }
 
@@ -525,6 +545,9 @@ describe('Enrollment anchoring (Story 13.3)', () => {
     await prisma.enrollment.deleteMany({ where: { studentId: { in: allStudentIds } } });
     await prisma.student.deleteMany({ where: { userId: { in: studentUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: studentUserIds } } });
+    // Story 13.4 — ClassOwnership is ON DELETE RESTRICT against both Class and
+    // Teacher, so it must be torn down before either of those below.
+    await prisma.classOwnership.deleteMany({ where: { classId: { in: [classAId, classBId, classCId] } } });
     await prisma.class.deleteMany({ where: { id: { in: [classAId, classBId, classCId] } } });
     await prisma.teacher.deleteMany({ where: { id: { in: [teacherATeacherId, teacherBTeacherId] } } });
     await prisma.user.deleteMany({ where: { id: { in: [teacherAUserId, teacherBUserId] } } });
