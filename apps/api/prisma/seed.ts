@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { assignClassOwnership } from '../src/lib/temporal/classOwnership.js';
 
 const prisma = new PrismaClient();
 
@@ -126,9 +127,13 @@ async function main() {
     where: { gradeLevel_section_year: MAIN_TEST_CLASS },
   });
   if (!mainClass) {
+    const teacherProfile = teacherProfiles.get('teacher@edu.com')!;
     mainClass = await prisma.class.create({
-      data: { ...MAIN_TEST_CLASS, teacherId: teacherProfiles.get('teacher@edu.com')!.id },
+      data: { ...MAIN_TEST_CLASS, teacherId: teacherProfile.id },
     });
+    // Story 13.4 — ownership reads go through ClassOwnership, not
+    // Class.teacherId; every seeded class needs a matching open row.
+    await assignClassOwnership(prisma, mainClass.id, teacherProfile.id);
   }
   classMap.set(classKey(mainClass), mainClass);
 
@@ -140,6 +145,7 @@ async function main() {
       cls = await prisma.class.create({
         data: { ...identity, teacherId: tProfile.id },
       });
+      await assignClassOwnership(prisma, cls.id, tProfile.id);
     }
     classMap.set(classKey(cls), cls);
   }
@@ -163,6 +169,22 @@ async function main() {
   const lastNames = ['Perera', 'Silva', 'Fernando', 'De Silva', 'Kumara', 'Bandara', 'Herath', 'Dissanayake', 'Wickramasinghe', 'Gunawardena', 'Rajapaksha', 'Jayawardena', 'Liyanage', 'Ranasinghe', 'Peiris', 'Ratnayake', 'Wijesinghe', 'Balasuriya', 'Samarasinghe', 'Edirisinghe'];
 
   const studentUsers = [];
+  // Story 13.3 — TermMark.enrollmentId is required, but marks are generated
+  // for years (2023-2025) beyond a class's own year (always 2025 in this
+  // seed). Not historically realistic, but seed data only needs one
+  // unambiguous Enrollment per (studentId, year) for resolveEnrollmentId's
+  // shape. Keyed `${studentId}|${year}`, populated by ensureEnrollment.
+  const enrollmentByStudentYear = new Map<string, number>();
+  async function ensureEnrollment(studentId: number, classId: number, year: number) {
+    const enrolledAt = new Date(Date.UTC(year, 0, 1));
+    const enrollment = await prisma.enrollment.upsert({
+      where: { studentId_classId_enrolledAt: { studentId, classId, enrolledAt } },
+      update: {},
+      create: { studentId, classId, enrolledAt, status: 'ACTIVE' },
+    });
+    enrollmentByStudentYear.set(`${studentId}|${year}`, enrollment.id);
+  }
+  const markYears = [2023, 2024, 2025];
   // Ensure main student is in the main class
   const mainStudentUser = await prisma.user.upsert({
     where: { email: 'student@edu.com' },
@@ -197,12 +219,9 @@ async function main() {
   });
   // Story 13.2 — keep Enrollment in sync with the implicit relation (AD-1 Phase 1).
   // enrolledAt = Jan 1 of class year, UTC (AD-10). Upsert is idempotent.
-  const mainEnrolledAt = new Date(Date.UTC(mainClass.year, 0, 1));
-  await prisma.enrollment.upsert({
-    where: { studentId_classId_enrolledAt: { studentId: mainStudentProfile.id, classId: mainClass.id, enrolledAt: mainEnrolledAt } },
-    update: {},
-    create: { studentId: mainStudentProfile.id, classId: mainClass.id, enrolledAt: mainEnrolledAt, status: 'ACTIVE' },
-  });
+  for (const year of markYears) {
+    await ensureEnrollment(mainStudentProfile.id, mainClass.id, year);
+  }
   studentUsers.push(mainStudentProfile);
 
   await prisma.guardian.upsert({
@@ -268,12 +287,9 @@ async function main() {
       },
     });
     // Story 13.2 — keep Enrollment in sync with the implicit relation (AD-1 Phase 1).
-    const genEnrolledAt = new Date(Date.UTC(assignedClass.year, 0, 1));
-    await prisma.enrollment.upsert({
-      where: { studentId_classId_enrolledAt: { studentId: profile.id, classId: assignedClass.id, enrolledAt: genEnrolledAt } },
-      update: {},
-      create: { studentId: profile.id, classId: assignedClass.id, enrolledAt: genEnrolledAt, status: 'ACTIVE' },
-    });
+    for (const year of markYears) {
+      await ensureEnrollment(profile.id, assignedClass.id, year);
+    }
     studentUsers.push(profile);
     studentCount++;
   }
@@ -296,17 +312,20 @@ async function main() {
     const basePerformance = randomInt(45, 95); 
 
     for (const termInfo of allTerms) {
+      const enrollmentId = enrollmentByStudentYear.get(`${student.id}|${termInfo.year}`);
+      if (!enrollmentId) continue; // No Enrollment for this student/year — skip rather than violate the FK.
       for (const subjectName of studentSubjects) {
         const subject = subjectMap.get(subjectName)!;
         let mark = basePerformance + randomInt(-12, 12);
         if (mark > 100) mark = 100;
-        if (mark < 0) mark = randomInt(20, 35); 
+        if (mark < 0) mark = randomInt(20, 35);
 
         markRecords.push({
           studentId: student.id,
           subjectId: subject.id,
           term: termInfo.term,
           year: termInfo.year,
+          enrollmentId,
           marks: mark,
         });
       }
