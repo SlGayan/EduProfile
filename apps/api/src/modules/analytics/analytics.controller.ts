@@ -8,6 +8,7 @@ import {
 } from '../../validators/analyticsValidators.js';
 import { READ_TX_OPTIONS, round2 } from '../../lib/queryHelpers.js';
 import { deriveClassName } from '../../lib/classIdentity.js';
+import { getOwnedClassIds } from '../../lib/temporal/classOwnership.js';
 
 // Per-module client, matching every other file in apps/api/src. No shared
 // singleton exists in this codebase; introducing one is out of scope here.
@@ -51,10 +52,10 @@ function activeStudentFilter(classId?: number): Prisma.StudentWhereInput {
  * Administrators and Principals reach every class (AC4). Teachers reach only
  * classes they are assigned to (AC3).
  *
- * The ownership test runs from the teacher's side (`teacher.classes`) rather
- * than comparing `Class.teacherId` directly, because `Class.teacherId` is
- * nullable — an unassigned class holds `null`, and a direct comparison risks
- * matching on a null-ish value.
+ * Story 13.4 — the ownership test reads through the time-bounded
+ * `getOwnedClassIds` resolver rather than `teacher.classes`/`Class.teacherId`
+ * directly, so a class reassigned away from this teacher stops being
+ * reachable here.
  *
  * Authorization deliberately runs BEFORE the class-existence check, so a
  * teacher probing ids they don't own always receives 403 and can't use the
@@ -77,14 +78,14 @@ async function authorizeClassAccess(
 
   const teacher = await prisma.teacher.findUnique({
     where: { userId: req.user.id, user: { deletedAt: null } },
-    include: { classes: { select: { id: true } } },
   });
 
   if (!teacher) {
     return { status: 403, error: 'Teacher profile not found' };
   }
 
-  if (!teacher.classes.some((c) => c.id === classId)) {
+  const ownedClassIds = await getOwnedClassIds(teacher.id);
+  if (!ownedClassIds.includes(classId)) {
     return { status: 403, error: 'You do not have permission to view analytics for this class' };
   }
 

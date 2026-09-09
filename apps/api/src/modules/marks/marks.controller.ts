@@ -5,6 +5,7 @@ import { z } from 'zod';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
 import { createMarkSchema } from '../../validators/markValidators.js';
+import { getOwnedClassIds } from '../../lib/temporal/classOwnership.js';
 
 const prisma = new PrismaClient();
 
@@ -140,14 +141,17 @@ export const importMarks = async (req: AuthRequest, res: Response) => {
     // any per-class/subject teaching assignments (Story 12.3).
     const teacher = await prisma.teacher.findUnique({
       where: { userId: teacherUserId, user: { deletedAt: null } },
-      include: { classes: true, subjectAssignments: true }
+      include: { subjectAssignments: true }
     });
 
     if (!teacher) {
       return res.status(403).json({ error: 'Teacher profile not found' });
     }
 
-    const teacherClassIds = teacher.classes.map(c => c.id);
+    // Story 13.4 — ownership now reads through the time-bounded resolver
+    // rather than `teacher.classes`, so a class no longer owned by this
+    // teacher (reassigned away) stops being counted here.
+    const teacherClassIds = await getOwnedClassIds(teacher.id);
     if (teacherClassIds.length === 0 && teacher.subjectAssignments.length === 0) {
       return res.status(403).json({ error: 'Teacher is not assigned to any classes' });
     }
@@ -301,14 +305,15 @@ export const createMark = async (req: AuthRequest, res: Response) => {
 
     const teacher = await prisma.teacher.findUnique({
       where: { userId: req.user.id, user: { deletedAt: null } },
-      include: { classes: true },
     });
 
     if (!teacher) {
       return res.status(403).json({ error: 'Teacher profile not found' });
     }
 
-    const teacherClassIds = teacher.classes.map((c) => c.id);
+    // Story 13.4 — ownership now reads through the time-bounded resolver
+    // rather than `teacher.classes`.
+    const teacherClassIds = await getOwnedClassIds(teacher.id);
     if (teacherClassIds.length === 0) {
       return res.status(403).json({ error: 'Teacher is not assigned to any classes' });
     }
@@ -455,7 +460,7 @@ export const getClassMarks = async (req: AuthRequest, res: Response) => {
 
     const teacher = await prisma.teacher.findUnique({
       where: { userId: req.user.id, user: { deletedAt: null } },
-      include: { classes: true, subjectAssignments: true },
+      include: { subjectAssignments: true },
     });
 
     if (!teacher) {
@@ -464,10 +469,13 @@ export const getClassMarks = async (req: AuthRequest, res: Response) => {
 
     // View access is granted for a whole class if the teacher owns it OR has
     // any TeacherSubjectAssignment in it (view is not subject-filtered, per
-    // Story 12.3 -- only editing via importMarks is subject-scoped).
+    // Story 12.3 -- only editing via importMarks is subject-scoped). Story
+    // 13.4 — ownership now reads through the time-bounded resolver rather
+    // than `teacher.classes`; the subject-assignment union is untouched.
+    const ownedClassIds = await getOwnedClassIds(teacher.id);
     const teacherClassIds = [
       ...new Set([
-        ...teacher.classes.map((c) => c.id),
+        ...ownedClassIds,
         ...teacher.subjectAssignments.map((a) => a.classId),
       ]),
     ];

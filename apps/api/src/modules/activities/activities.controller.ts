@@ -6,6 +6,7 @@ import {
   updateActivitySchema,
   mergedActivityDatesSchema,
 } from '../../validators/activityValidators.js';
+import { getOwnedClassIds } from '../../lib/temporal/classOwnership.js';
 
 // Per-module client, matching every other file in apps/api/src. No shared
 // singleton exists in this codebase; introducing one is out of scope here.
@@ -93,14 +94,15 @@ export async function authorizeStudentAccess(
 
   const teacher = await prisma.teacher.findUnique({
     where: { userId: req.user.id, user: { deletedAt: null } },
-    include: { classes: true },
   });
 
   if (!teacher) {
     return { status: 403, error: 'Teacher profile not found' };
   }
 
-  const teacherClassIds = teacher.classes.map((c) => c.id);
+  // Story 13.4 — ownership now reads through the time-bounded resolver
+  // rather than `teacher.classes`.
+  const teacherClassIds = await getOwnedClassIds(teacher.id);
   if (teacherClassIds.length === 0) {
     return { status: 403, error: 'Teacher is not assigned to any classes' };
   }
@@ -409,12 +411,16 @@ export const getPendingActivities = async (req: AuthRequest, res: Response) => {
   try {
     const teacher = await prisma.teacher.findUnique({
       where: { userId: req.user!.id, user: { deletedAt: null } },
-      include: { classes: true },
     });
-    if (!teacher || teacher.classes.length === 0) {
+    if (!teacher) {
       return res.status(200).json([]);
     }
-    const classIds = teacher.classes.map((c) => c.id);
+    // Story 13.4 — ownership now reads through the time-bounded resolver
+    // rather than `teacher.classes`.
+    const classIds = await getOwnedClassIds(teacher.id);
+    if (classIds.length === 0) {
+      return res.status(200).json([]);
+    }
 
     const pendingActivities = await prisma.extracurricularActivity.findMany({
       where: {

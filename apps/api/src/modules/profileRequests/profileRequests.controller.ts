@@ -6,6 +6,7 @@ import {
   reviewProfileRequestSchema,
 } from '../../validators/profileRequestValidators.js';
 import { authorizeStudentAccess } from '../activities/activities.controller.js';
+import { getOwnedClassIds } from '../../lib/temporal/classOwnership.js';
 
 // Per-module client, matching every other file in apps/api/src.
 const prisma = new PrismaClient();
@@ -113,12 +114,16 @@ export const listPendingProfileRequests = async (req: AuthRequest, res: Response
   try {
     const teacher = await prisma.teacher.findUnique({
       where: { userId: req.user!.id, user: { deletedAt: null } },
-      include: { classes: true },
     });
-    if (!teacher || teacher.classes.length === 0) {
+    if (!teacher) {
       return res.status(200).json([]);
     }
-    const classIds = teacher.classes.map((c) => c.id);
+    // Story 13.4 — ownership now reads through the time-bounded resolver
+    // rather than `teacher.classes`.
+    const classIds = await getOwnedClassIds(teacher.id);
+    if (classIds.length === 0) {
+      return res.status(200).json([]);
+    }
 
     const pendingRequests = await prisma.profileEditRequest.findMany({
       where: {
